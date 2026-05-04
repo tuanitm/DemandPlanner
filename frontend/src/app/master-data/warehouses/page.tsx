@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
+import ImportExcel from '@/components/ui/ImportExcel';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import FilterBar, { FilterConfig } from '@/components/ui/FilterBar';
 import Pagination from '@/components/ui/Pagination';
@@ -69,7 +70,10 @@ export default function WarehousesPage() {
           <h1 className="page-title">Warehouses</h1>
           <p className="page-description">Manage warehouse locations and regions</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}><Plus size={16} /> Add Warehouse</button>
+        <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+          <ImportExcel entityKey="warehouses" entityLabel="Warehouses" onImportComplete={fetchData} />
+          <button className="btn btn-primary" onClick={openCreate}><Plus size={16} /> Add Warehouse</button>
+        </div>
       </div>
 
       <FilterBar searchPlaceholder="Search warehouses..." filters={filterCfg} onFilterChange={(f) => { setFilters(f); setPage(1); }} />

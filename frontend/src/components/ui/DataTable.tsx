@@ -14,6 +14,7 @@ interface DataTableProps<T> {
   columns: Column<T>[];
   data: T[];
   loading?: boolean;
+  emptyIcon?: ReactNode;
   emptyTitle?: string;
   emptyText?: string;
   rowKey?: (item: T) => string | number;
@@ -23,6 +24,7 @@ export default function DataTable<T extends object>({
   columns,
   data,
   loading = false,
+  emptyIcon,
   emptyTitle = 'No data found',
   emptyText = 'Try adjusting your filters or add new records.',
   rowKey,
@@ -67,7 +69,7 @@ export default function DataTable<T extends object>({
           </thead>
         </table>
         <div className="empty-state">
-          <Inbox size={48} className="empty-state-icon" />
+          {emptyIcon || <Inbox size={48} className="empty-state-icon" />}
           <div className="empty-state-title">{emptyTitle}</div>
           <div className="empty-state-text">{emptyText}</div>
         </div>

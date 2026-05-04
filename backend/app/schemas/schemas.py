@@ -39,6 +39,11 @@ class OrderStatusEnum(str, Enum):
     COMPLETED = "Completed"
     CANCELLED = "Cancelled"
 
+class StockInTypeEnum(str, Enum):
+    SUPPLIER_RECEIPT = "Supplier Receipt"
+    PRODUCTION_RECEIPT = "Production Receipt"
+    OTHER_RECEIPT = "Other Receipt"
+
 class UserRoleEnum(str, Enum):
     ADMIN = "Admin"
     PLANNER = "Planner"
@@ -332,6 +337,51 @@ class ProductionOrderResponse(ProductionOrderBase):
     id: int
     created_at: datetime
     updated_at: datetime
+    class Config:
+        from_attributes = True
+
+
+# ──────────────────────────────────────────────
+# Stock In Transaction
+# ──────────────────────────────────────────────
+
+class StockInBase(BaseModel):
+    trans_type: StockInTypeEnum
+    item_code: str
+    warehouse_code: str
+    quantity: float
+    reference_number: Optional[str] = None
+    trans_date: date
+    source: str = "Manual"
+
+class StockInCreate(StockInBase):
+    pass
+
+class StockInResponse(StockInBase):
+    id: int
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+
+# ──────────────────────────────────────────────
+# Ad-hoc Demand
+# ──────────────────────────────────────────────
+
+class DemandAdhocBase(BaseModel):
+    item_code: str
+    warehouse_code: str
+    quantity: float
+    demand_source: Optional[str] = None
+    demand_date: date
+    notes: Optional[str] = None
+
+class DemandAdhocCreate(DemandAdhocBase):
+    pass
+
+class DemandAdhocResponse(DemandAdhocBase):
+    id: int
+    created_at: datetime
     class Config:
         from_attributes = True
 

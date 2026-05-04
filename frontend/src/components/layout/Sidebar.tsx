@@ -43,8 +43,10 @@ const navigation: NavSection[] = [
   {
     title: 'Data Input',
     items: [
-      { label: 'Import Data', href: '/data-input/import', icon: <FileSpreadsheet size={20} /> },
       { label: 'Sales Entry', href: '/data-input/sales', icon: <TrendingUp size={20} /> },
+      { label: 'Inventory', href: '/data-input/inventory', icon: <Package size={20} /> },
+      { label: 'Orders (PO/MO)', href: '/data-input/orders', icon: <FileSpreadsheet size={20} /> },
+      { label: 'Import Data', href: '/data-input/import', icon: <Database size={20} /> },
     ],
   },
   {

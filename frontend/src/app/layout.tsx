@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
+import { AuthProvider } from "@/components/providers/AuthProvider";
 
 export const metadata: Metadata = {
   title: "DemandPlanner — AI-Powered Demand Forecasting",
@@ -16,7 +17,9 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ToastProvider>
-          {children}
+          <AuthProvider>
+            {children}
+          </AuthProvider>
         </ToastProvider>
       </body>
     </html>

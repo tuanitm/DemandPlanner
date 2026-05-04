@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
+import ImportExcel from '@/components/ui/ImportExcel';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import FilterBar, { FilterConfig } from '@/components/ui/FilterBar';
 import Pagination from '@/components/ui/Pagination';
@@ -163,9 +164,12 @@ export default function PartnersPage() {
           <h1 className="page-title">Business Partners</h1>
           <p className="page-description">Manage partner groups and individual business partners</p>
         </div>
-        <button className="btn btn-primary" onClick={tab === 'groups' ? openCreateGroup : openCreatePartner}>
-          <Plus size={16} /> {tab === 'groups' ? 'Add Group' : 'Add Partner'}
-        </button>
+        <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+          <ImportExcel entityKey={tab === 'groups' ? 'partner-groups' : 'partners'} entityLabel={tab === 'groups' ? 'Partner Groups' : 'Partners'} onImportComplete={tab === 'groups' ? fetchGroups : fetchPartners} />
+          <button className="btn btn-primary" onClick={tab === 'groups' ? openCreateGroup : openCreatePartner}>
+            <Plus size={16} /> {tab === 'groups' ? 'Add Group' : 'Add Partner'}
+          </button>
+        </div>
       </div>
 
       <div className="tabs">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, RotateCcw } from 'lucide-react';
 
 export interface FilterConfig {
@@ -21,38 +21,51 @@ export default function FilterBar({
   searchPlaceholder = 'Search...',
   onFilterChange,
 }: FilterBarProps) {
-  const getInitialValues = useCallback(() => {
+  const buildInitialValues = useCallback((): Record<string, string> => {
     const initial: Record<string, string> = { search: '' };
     filters.forEach(f => { initial[f.key] = f.defaultValue || ''; });
     return initial;
   }, [filters]);
 
-  const [values, setValues] = useState<Record<string, string>>(getInitialValues);
+  const [values, setValues] = useState<Record<string, string>>(buildInitialValues);
   const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null);
+  const onFilterChangeRef = useRef(onFilterChange);
+
+  // Keep the callback ref up to date to avoid stale closures
+  useEffect(() => {
+    onFilterChangeRef.current = onFilterChange;
+  }, [onFilterChange]);
 
   // Debounced search
   const handleSearchChange = (search: string) => {
-    const newValues = { ...values, search };
-    setValues(newValues);
-
-    if (debounceTimer) clearTimeout(debounceTimer);
-    const timer = setTimeout(() => {
-      onFilterChange(newValues);
-    }, 350);
-    setDebounceTimer(timer);
+    setValues(prev => {
+      const newValues = { ...prev, search };
+      if (debounceTimer) clearTimeout(debounceTimer);
+      const timer = setTimeout(() => {
+        onFilterChangeRef.current(newValues);
+      }, 350);
+      setDebounceTimer(timer);
+      return newValues;
+    });
   };
 
-  // Immediate filter for dropdowns
+  // Immediate filter for dropdowns — use functional updater to avoid stale state
   const handleFilterChange = (key: string, value: string) => {
-    const newValues = { ...values, [key]: value };
-    setValues(newValues);
-    onFilterChange(newValues);
+    setValues(prev => {
+      const newValues = { ...prev, [key]: value };
+      // Use setTimeout to ensure the state update is committed before notifying parent
+      // This avoids React batching issues where the parent re-render uses stale closure values
+      setTimeout(() => {
+        onFilterChangeRef.current(newValues);
+      }, 0);
+      return newValues;
+    });
   };
 
   const handleReset = () => {
-    const initial = getInitialValues();
+    const initial = buildInitialValues();
     setValues(initial);
-    onFilterChange(initial);
+    onFilterChangeRef.current(initial);
   };
 
   const hasActiveFilters = values.search !== '' || filters.some(f => values[f.key] !== (f.defaultValue || ''));

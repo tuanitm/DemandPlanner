@@ -236,3 +236,154 @@ export const masterDataApi = {
       api.post<ExchangeRate>('/api/master-data/exchange-rates', data),
   },
 };
+
+
+// ──────────────────────────────────────────────
+// Transaction Types
+// ──────────────────────────────────────────────
+
+export interface ActualSales {
+  id: number;
+  item_code: string;
+  warehouse_code: string;
+  partner_code: string | null;
+  year: number;
+  month: number;
+  quantity: number;
+  amount: number;
+  source: string;
+  created_at: string;
+}
+
+export interface InventoryOnhand {
+  id: number;
+  item_code: string;
+  warehouse_code: string;
+  quantity: number;
+  unit_cost: number | null;
+  expiry_date: string | null;
+  batch_number: string | null;
+  last_updated: string;
+}
+
+export interface PurchaseOrder {
+  id: number;
+  po_number: string;
+  item_code: string;
+  warehouse_code: string;
+  partner_code: string | null;
+  quantity: number;
+  received_qty: number;
+  eta: string | null;
+  status: string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductionOrder {
+  id: number;
+  mo_number: string;
+  item_code: string;
+  warehouse_code: string;
+  quantity: number;
+  completed_qty: number;
+  planned_date: string | null;
+  status: string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StockInTransaction {
+  id: number;
+  trans_type: string;
+  item_code: string;
+  warehouse_code: string;
+  quantity: number;
+  reference_number: string | null;
+  trans_date: string;
+  source: string;
+  created_at: string;
+}
+
+export interface DemandAdhoc {
+  id: number;
+  item_code: string;
+  warehouse_code: string;
+  quantity: number;
+  demand_source: string | null;
+  demand_date: string;
+  notes: string | null;
+  created_at: string;
+}
+
+
+// ──────────────────────────────────────────────
+// Transaction API
+// ──────────────────────────────────────────────
+
+export const transactionApi = {
+  sales: {
+    list: (params: { page?: number; page_size?: number; search?: string; item_code?: string; warehouse_code?: string; year?: number; month?: number } = {}) =>
+      api.get<PaginatedResponse<ActualSales>>(`/api/transactions/sales${buildQuery(params)}`),
+    create: (data: Omit<ActualSales, 'id' | 'created_at'>) =>
+      api.post<ActualSales>('/api/transactions/sales', data),
+    bulkCreate: (data: Omit<ActualSales, 'id' | 'created_at'>[]) =>
+      api.post<{ message: string; count: number }>('/api/transactions/sales/bulk', data),
+    delete: (id: number) =>
+      api.delete<MessageResponse>(`/api/transactions/sales/${id}`),
+  },
+
+  inventory: {
+    list: (params: { page?: number; page_size?: number; search?: string; item_code?: string; warehouse_code?: string } = {}) =>
+      api.get<PaginatedResponse<InventoryOnhand>>(`/api/transactions/inventory${buildQuery(params)}`),
+    create: (data: Omit<InventoryOnhand, 'id' | 'last_updated'>) =>
+      api.post<InventoryOnhand>('/api/transactions/inventory', data),
+    update: (id: number, data: Omit<InventoryOnhand, 'id' | 'last_updated'>) =>
+      api.put<InventoryOnhand>(`/api/transactions/inventory/${id}`, data),
+    delete: (id: number) =>
+      api.delete<MessageResponse>(`/api/transactions/inventory/${id}`),
+  },
+
+  purchaseOrders: {
+    list: (params: { page?: number; page_size?: number; search?: string; item_code?: string; status?: string } = {}) =>
+      api.get<PaginatedResponse<PurchaseOrder>>(`/api/transactions/purchase-orders${buildQuery(params)}`),
+    create: (data: Omit<PurchaseOrder, 'id' | 'created_at' | 'updated_at'>) =>
+      api.post<PurchaseOrder>('/api/transactions/purchase-orders', data),
+    update: (id: number, data: Omit<PurchaseOrder, 'id' | 'created_at' | 'updated_at'>) =>
+      api.put<PurchaseOrder>(`/api/transactions/purchase-orders/${id}`, data),
+    delete: (id: number) =>
+      api.delete<MessageResponse>(`/api/transactions/purchase-orders/${id}`),
+  },
+
+  productionOrders: {
+    list: (params: { page?: number; page_size?: number; search?: string; item_code?: string; status?: string } = {}) =>
+      api.get<PaginatedResponse<ProductionOrder>>(`/api/transactions/production-orders${buildQuery(params)}`),
+    create: (data: Omit<ProductionOrder, 'id' | 'created_at' | 'updated_at'>) =>
+      api.post<ProductionOrder>('/api/transactions/production-orders', data),
+    update: (id: number, data: Omit<ProductionOrder, 'id' | 'created_at' | 'updated_at'>) =>
+      api.put<ProductionOrder>(`/api/transactions/production-orders/${id}`, data),
+    delete: (id: number) =>
+      api.delete<MessageResponse>(`/api/transactions/production-orders/${id}`),
+  },
+
+  stockIn: {
+    list: (params: { page?: number; page_size?: number; search?: string; item_code?: string; trans_type?: string } = {}) =>
+      api.get<PaginatedResponse<StockInTransaction>>(`/api/transactions/stock-in${buildQuery(params)}`),
+    create: (data: Omit<StockInTransaction, 'id' | 'created_at'>) =>
+      api.post<StockInTransaction>('/api/transactions/stock-in', data),
+    delete: (id: number) =>
+      api.delete<MessageResponse>(`/api/transactions/stock-in/${id}`),
+  },
+
+  adhocDemand: {
+    list: (params: { page?: number; page_size?: number; search?: string; item_code?: string } = {}) =>
+      api.get<PaginatedResponse<DemandAdhoc>>(`/api/transactions/adhoc-demand${buildQuery(params)}`),
+    create: (data: Omit<DemandAdhoc, 'id' | 'created_at'>) =>
+      api.post<DemandAdhoc>('/api/transactions/adhoc-demand', data),
+    delete: (id: number) =>
+      api.delete<MessageResponse>(`/api/transactions/adhoc-demand/${id}`),
+  },
+};
+

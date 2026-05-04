@@ -7,12 +7,35 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem('dp_token');
-    if (token) {
+    const init = async () => {
+      const token = localStorage.getItem('dp_token');
+      if (token) {
+        router.push('/dashboard');
+        return;
+      }
+
+      // Auto-login with default admin credentials for seamless dev experience
+      try {
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const res = await fetch(`${API_BASE}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          localStorage.setItem('dp_token', data.access_token);
+          localStorage.setItem('dp_user', JSON.stringify(data.user));
+        }
+      } catch {
+        // Backend may not be running, continue anyway
+      }
+
       router.push('/dashboard');
-    } else {
-      router.push('/login');
-    }
+    };
+
+    init();
   }, [router]);
 
   return (

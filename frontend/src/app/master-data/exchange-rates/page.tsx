@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Plus, Calendar } from 'lucide-react';
+import ImportExcel from '@/components/ui/ImportExcel';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
@@ -69,6 +70,7 @@ export default function ExchangeRatesPage() {
           <select className="form-input form-select" style={{ width: 120 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
+          <ImportExcel entityKey="exchange-rates" entityLabel="Exchange Rates" onImportComplete={fetchData} />
           <button className="btn btn-primary" onClick={openCreate}><Plus size={16} /> Add Rate</button>
         </div>
       </div>

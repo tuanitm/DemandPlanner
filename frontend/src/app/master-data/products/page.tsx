@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Plus } from 'lucide-react';
+import ImportExcel from '@/components/ui/ImportExcel';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import FilterBar, { FilterConfig } from '@/components/ui/FilterBar';
 import Pagination from '@/components/ui/Pagination';
@@ -112,9 +113,12 @@ export default function ProductsPage() {
           <h1 className="page-title">Products & SKUs</h1>
           <p className="page-description">Manage product hierarchy and item master data</p>
         </div>
-        <button className="btn btn-primary" onClick={tab === 'hierarchy' ? openCreateH : openCreateI}>
-          <Plus size={16} /> {tab === 'hierarchy' ? 'Add Group' : 'Add Item'}
-        </button>
+        <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+          <ImportExcel entityKey={tab === 'hierarchy' ? 'product-hierarchy' : 'items'} entityLabel={tab === 'hierarchy' ? 'Product Hierarchy' : 'Items'} onImportComplete={tab === 'hierarchy' ? fetchHierarchy : fetchItems} />
+          <button className="btn btn-primary" onClick={tab === 'hierarchy' ? openCreateH : openCreateI}>
+            <Plus size={16} /> {tab === 'hierarchy' ? 'Add Group' : 'Add Item'}
+          </button>
+        </div>
       </div>
 
       <div className="tabs">

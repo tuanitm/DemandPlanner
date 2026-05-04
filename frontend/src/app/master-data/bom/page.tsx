@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Plus, Search, Package } from 'lucide-react';
+import ImportExcel from '@/components/ui/ImportExcel';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
@@ -77,9 +78,12 @@ export default function BOMPage() {
           <h1 className="page-title">Bill of Materials</h1>
           <p className="page-description">Define raw material breakdown for finished goods</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate} disabled={!selectedFG}>
-          <Plus size={16} /> Add BOM Entry
-        </button>
+        <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+          <ImportExcel entityKey="bom" entityLabel="Bill of Materials" onImportComplete={() => selectedFG && fetchBOM(selectedFG)} />
+          <button className="btn btn-primary" onClick={openCreate} disabled={!selectedFG}>
+            <Plus size={16} /> Add BOM Entry
+          </button>
+        </div>
       </div>
 
       <div className="grid-2" style={{ marginBottom: 'var(--space-6)', alignItems: 'start' }}>

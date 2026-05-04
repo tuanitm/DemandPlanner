@@ -11,7 +11,7 @@ from app.database import engine, Base, async_session_factory
 from app.models.master_data import *  # noqa: F401,F403
 from app.models.transactions import *  # noqa: F401,F403
 from app.models.forecasts import *  # noqa: F401,F403
-from app.api import auth, master_data, transactions
+from app.api import auth, master_data, transactions, import_export, forecast_api
 from app.services.auth_service import hash_password
 
 
@@ -67,6 +67,8 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(master_data.router)
 app.include_router(transactions.router)
+app.include_router(import_export.router)
+app.include_router(forecast_api.router)
 
 
 @app.get("/api/health")
