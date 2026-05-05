@@ -130,7 +130,8 @@ class Item(Base):
     uom = Column(String(20), nullable=False)  # Unit of Measure
     item_type = Column(Enum(ItemType), nullable=False, index=True)
     status = Column(Enum(StatusType), default=StatusType.ACTIVE, nullable=False)
-    lead_time_days = Column(Integer, default=14)  # For safety stock calculation
+    import_lead_time_days = Column(Integer, default=30)  # Lead time for PO (import/purchase)
+    production_lead_time_days = Column(Integer, default=14)  # Lead time for MO (production)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

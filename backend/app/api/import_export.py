@@ -81,7 +81,8 @@ TEMPLATES = {
             ("item_partner_code", "Partner Code", 16, "Optional"),
             ("uom", "UoM", 8, "PCS / KG / LT / BOX"),
             ("item_type", "Item Type", 16, "Goods / Finished Goods / Raw Material"),
-            ("lead_time_days", "Lead Time (days)", 16, "Number (default: 14)"),
+            ("import_lead_time_days", "Import Lead Time (days)", 20, "Number — PO lead time (default: 30)"),
+            ("production_lead_time_days", "Production Lead Time (days)", 22, "Number — MO lead time (default: 14)"),
             ("status", "Status", 12, "Active / Inactive"),
         ],
         "model": Item,
@@ -299,8 +300,13 @@ async def upload_excel(
                     if val is not None and not isinstance(val, (int, float)):
                         val = str(val).strip()
                     # Handle numeric integer fields
-                    if field in ('lead_time_days', 'year', 'month'):
-                        data[field] = int(val) if val else (14 if field == 'lead_time_days' else None)
+                    if field in ('import_lead_time_days', 'production_lead_time_days', 'year', 'month'):
+                        if field == 'import_lead_time_days':
+                            data[field] = int(val) if val else 30
+                        elif field == 'production_lead_time_days':
+                            data[field] = int(val) if val else 14
+                        else:
+                            data[field] = int(val) if val else None
                     # Handle numeric float fields
                     elif field in ('quantity', 'rate', 'amount', 'unit_cost', 'received_qty', 'completed_qty'):
                         data[field] = float(val) if val else 0

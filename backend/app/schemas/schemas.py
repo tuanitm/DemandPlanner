@@ -153,7 +153,8 @@ class ItemBase(BaseModel):
     uom: str = Field(..., max_length=20)
     item_type: ItemTypeEnum
     status: StatusEnum = StatusEnum.ACTIVE
-    lead_time_days: int = 14
+    import_lead_time_days: int = 30
+    production_lead_time_days: int = 14
 
 class ItemCreate(ItemBase):
     pass
@@ -166,7 +167,8 @@ class ItemUpdate(BaseModel):
     uom: Optional[str] = None
     item_type: Optional[ItemTypeEnum] = None
     status: Optional[StatusEnum] = None
-    lead_time_days: Optional[int] = None
+    import_lead_time_days: Optional[int] = None
+    production_lead_time_days: Optional[int] = None
 
 class ItemResponse(ItemBase):
     id: int
