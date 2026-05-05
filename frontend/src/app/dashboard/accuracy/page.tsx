@@ -135,7 +135,7 @@ export default function ForecastAccuracyPage() {
             </tr>
           </thead>
           <tbody>
-            {accuracyData
+            {[...accuracyData]
               .sort((a, b) => a.fa - b.fa)
               .map((item, i) => (
                 <tr key={i}>

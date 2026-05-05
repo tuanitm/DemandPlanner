@@ -93,14 +93,14 @@ export default function ProductsPage() {
     { key: 'item_code', header: 'SKU Code', width: '120px', render: (r) => <span className="badge badge-info">{r.item_code}</span> },
     { key: 'item_name', header: 'Product Name', render: (r) => <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{r.item_name}</span> },
     { key: 'item_group_code', header: 'Group', width: '110px' },
-    { key: 'item_type', header: 'Type', width: '120px', render: (r) => <span className={`badge ${r.item_type === 'Finished Goods' ? 'badge-success' : r.item_type === 'Raw Material' ? 'badge-warning' : 'badge-info'}`}>{r.item_type}</span> },
+    { key: 'item_type', header: 'Type', width: '150px', render: (r) => <span className={`badge ${r.item_type === 'Finished Goods' ? 'badge-success' : r.item_type === 'Semi-Finished Goods' ? 'badge-info' : r.item_type === 'Raw Material' ? 'badge-warning' : 'badge-info'}`}>{r.item_type}</span> },
     { key: 'uom', header: 'UoM', width: '70px' },
     { key: 'lead_time_days', header: 'Lead Time', width: '90px', render: (r) => `${r.lead_time_days}d` },
     { key: 'status', header: 'Status', width: '90px', render: (r) => <span className={`badge ${r.status === 'Active' ? 'badge-success' : 'badge-warning'}`}>{r.status}</span> },
   ];
 
   const itemFilterCfg: FilterConfig[] = [
-    { key: 'item_type', label: 'Type', options: [{ value: '', label: 'All Types' }, { value: 'Goods', label: 'Goods' }, { value: 'Finished Goods', label: 'Finished Goods' }, { value: 'Raw Material', label: 'Raw Material' }] },
+    { key: 'item_type', label: 'Type', options: [{ value: '', label: 'All Types' }, { value: 'Goods', label: 'Goods' }, { value: 'Finished Goods', label: 'Finished Goods' }, { value: 'Semi-Finished Goods', label: 'Semi-Finished Goods' }, { value: 'Raw Material', label: 'Raw Material' }] },
   ];
 
   const openCreateH = () => { setHForm({ business: '', brand: '', item_category_code: '', item_category_name: '', item_group_code: '', item_group_name: '', status: 'Active' }); setShowHModal(true); };
@@ -168,7 +168,7 @@ export default function ProductsPage() {
         </div>
         <div className="form-group"><label className="form-label">Item Name *</label><input className="form-input" placeholder="Product name" value={iForm.item_name} onChange={(e) => setIForm({ ...iForm, item_name: e.target.value })} /></div>
         <div className="form-row form-row-3">
-          <div className="form-group"><label className="form-label">Type *</label><select className="form-input form-select" value={iForm.item_type} onChange={(e) => setIForm({ ...iForm, item_type: e.target.value })}><option value="Goods">Goods</option><option value="Finished Goods">Finished Goods</option><option value="Raw Material">Raw Material</option></select></div>
+          <div className="form-group"><label className="form-label">Type *</label><select className="form-input form-select" value={iForm.item_type} onChange={(e) => setIForm({ ...iForm, item_type: e.target.value })}><option value="Goods">Goods</option><option value="Finished Goods">Finished Goods</option><option value="Semi-Finished Goods">Semi-Finished Goods</option><option value="Raw Material">Raw Material</option></select></div>
           <div className="form-group"><label className="form-label">UoM *</label><input className="form-input" placeholder="PCS" value={iForm.uom} onChange={(e) => setIForm({ ...iForm, uom: e.target.value })} /></div>
           <div className="form-group"><label className="form-label">Lead Time (days)</label><input className="form-input" type="number" value={iForm.lead_time_days} onChange={(e) => setIForm({ ...iForm, lead_time_days: Number(e.target.value) })} /></div>
         </div>

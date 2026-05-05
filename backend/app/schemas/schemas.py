@@ -26,6 +26,7 @@ class PartnerGroupTypeEnum(str, Enum):
 class ItemTypeEnum(str, Enum):
     GOODS = "Goods"
     FINISHED_GOODS = "Finished Goods"
+    SEMI_FINISHED_GOODS = "Semi-Finished Goods"
     RAW_MATERIAL = "Raw Material"
 
 class StatusEnum(str, Enum):

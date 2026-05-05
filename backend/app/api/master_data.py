@@ -111,7 +111,7 @@ async def create_product_hierarchy(data: ProductHierarchyCreate, db: AsyncSessio
 
 @router.get("/items", response_model=PaginatedResponse)
 async def list_items(
-    page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+    page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=500),
     search: Optional[str] = None, item_type: Optional[str] = None, group_code: Optional[str] = None,
     db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user),
 ):
@@ -140,6 +140,17 @@ async def get_bom(fg_item_code: str, db: AsyncSession = Depends(get_db), current
 async def create_bom(data: BOMCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     obj = BillOfMaterial(**data.model_dump()); db.add(obj); await db.flush(); await db.refresh(obj)
     return BOMResponse.model_validate(obj)
+
+@router.post("/bom/bulk", response_model=List[BOMResponse], status_code=201)
+async def create_bom_bulk(data: List[BOMCreate], db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    results = []
+    for entry in data:
+        obj = BillOfMaterial(**entry.model_dump())
+        db.add(obj)
+        await db.flush()
+        await db.refresh(obj)
+        results.append(BOMResponse.model_validate(obj))
+    return results
 
 
 # ── Warehouses ──
