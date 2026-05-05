@@ -218,6 +218,8 @@ export const masterDataApi = {
       api.get<BOMEntry[]>(`/api/master-data/bom/${fgItemCode}`),
     create: (data: Omit<BOMEntry, 'id' | 'created_at'>) =>
       api.post<BOMEntry>('/api/master-data/bom', data),
+    bulkCreate: (data: Omit<BOMEntry, 'id' | 'created_at'>[]) =>
+      api.post<BOMEntry[]>('/api/master-data/bom/bulk', data),
   },
 
   // Warehouses
