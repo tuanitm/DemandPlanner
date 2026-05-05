@@ -387,3 +387,140 @@ export const transactionApi = {
   },
 };
 
+
+// ──────────────────────────────────────────────
+// Forecast Types
+// ──────────────────────────────────────────────
+
+export interface ForecastResult {
+  id: number;
+  item_code: string;
+  warehouse_code: string;
+  year: number;
+  month: number;
+  model_type: string;
+  forecast_qty: number;
+  confidence_lower: number | null;
+  confidence_upper: number | null;
+  created_at: string;
+}
+
+export interface RecommendationItem {
+  item_code: string;
+  warehouse_code: string;
+  forecast_qty: number;
+  safety_stock?: number;
+  onhand: number;
+  incoming: number;
+  suggested_qty: number;
+  risk: string;
+  notes: string | null;
+}
+
+export interface RecommendationsSummary {
+  total: number;
+  purchase_orders: {
+    count: number;
+    total_qty: number;
+    items: RecommendationItem[];
+  };
+  production_orders: {
+    count: number;
+    total_qty: number;
+    items: RecommendationItem[];
+  };
+  rm_purchases: {
+    count: number;
+    total_qty: number;
+    items: RecommendationItem[];
+  };
+  risk_breakdown: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+}
+
+export interface ForecastGenerateResponse {
+  forecast?: {
+    message: string;
+    combinations: number;
+    forecast_count: number;
+    model_detail_count: number;
+    accuracy_records: number;
+    horizon_months: number;
+    model_weights: Record<string, Record<string, number>>;
+  };
+  supply?: {
+    message: string;
+    count: number;
+    purchase_orders: number;
+    production_orders: number;
+    rm_purchases: number;
+  };
+  // async mode
+  task_id?: string;
+  status?: string;
+  message?: string;
+}
+
+export interface AccuracySummary {
+  items: Array<{
+    item_code: string;
+    fa_percent: number;
+    revenue_m: number;
+    zone: string;
+    periods: number;
+  }>;
+  overall_fa: number;
+  total_skus: number;
+  critical_count: number;
+  watch_count: number;
+  good_count: number;
+}
+
+export interface MonthlyComparison {
+  data: Array<{
+    year: number;
+    month: number;
+    month_name: string;
+    forecast: number;
+    actual: number;
+    fa: number;
+  }>;
+}
+
+
+// ──────────────────────────────────────────────
+// Forecast API
+// ──────────────────────────────────────────────
+
+export const forecastApi = {
+  generate: (params: { item_codes?: string[]; warehouse_codes?: string[]; horizon_months?: number } = {}) =>
+    api.post<ForecastGenerateResponse>('/api/forecast/generate', params),
+
+  generateAsync: (params: { item_codes?: string[]; warehouse_codes?: string[]; horizon_months?: number } = {}) =>
+    api.post<ForecastGenerateResponse>('/api/forecast/generate?async_mode=true', params),
+
+  taskStatus: (taskId: string) =>
+    api.get<{ task_id: string; status: string; result?: unknown; error?: string }>(`/api/forecast/task/${taskId}`),
+
+  results: (params: { page?: number; page_size?: number; item_code?: string; warehouse_code?: string; model_type?: string; year?: number; month?: number } = {}) =>
+    api.get<PaginatedResponse<ForecastResult>>(`/api/forecast/results${buildQuery(params)}`),
+
+  accuracy: (params: { page?: number; page_size?: number; item_code?: string; warehouse_code?: string } = {}) =>
+    api.get<PaginatedResponse<unknown>>(`/api/forecast/accuracy${buildQuery(params)}`),
+
+  accuracySummary: () =>
+    api.get<AccuracySummary>('/api/forecast/accuracy/summary'),
+
+  monthly: (year?: number) =>
+    api.get<MonthlyComparison>(`/api/forecast/monthly${year ? `?year=${year}` : ''}`),
+
+  recommendations: (params: { page?: number; page_size?: number; recommendation_type?: string; shortage_risk?: string; item_code?: string } = {}) =>
+    api.get<PaginatedResponse<unknown>>(`/api/forecast/recommendations${buildQuery(params)}`),
+
+  recommendationsSummary: () =>
+    api.get<RecommendationsSummary>('/api/forecast/recommendations/summary'),
+};
