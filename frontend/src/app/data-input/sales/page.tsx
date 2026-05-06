@@ -11,6 +11,9 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { transactionApi, ActualSales } from '@/lib/api';
 
+const currentYear = new Date().getFullYear();
+const currentMonth = new Date().getMonth() + 1;
+
 export default function SalesEntryPage() {
   const { addToast } = useToast();
   const [data, setData] = useState<ActualSales[]>([]);
@@ -18,14 +21,18 @@ export default function SalesEntryPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<Record<string, string>>({ search: '', year: '', warehouse_code: '' });
+  const [filters, setFilters] = useState<Record<string, string>>({
+    search: '',
+    year: String(currentYear),
+    month: String(currentMonth),
+  });
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const [form, setForm] = useState({
     item_code: '', warehouse_code: '', partner_code: '',
-    year: new Date().getFullYear(), month: new Date().getMonth() + 1,
+    year: currentYear, month: currentMonth,
     quantity: 0, amount: 0, source: 'Manual'
   });
 
@@ -36,7 +43,7 @@ export default function SalesEntryPage() {
         page, page_size: pageSize,
         search: filters.search || undefined,
         year: filters.year ? parseInt(filters.year) : undefined,
-        warehouse_code: filters.warehouse_code || undefined,
+        month: filters.month ? parseInt(filters.month) : undefined,
       });
       setData(res.items); setTotal(res.total);
     } catch (e) { addToast('error', 'Failed to load sales', (e as Error).message); }
@@ -51,7 +58,7 @@ export default function SalesEntryPage() {
       await transactionApi.sales.create(form as never);
       addToast('success', 'Sales record created');
       setShowModal(false); fetchData();
-      setForm({ item_code: '', warehouse_code: '', partner_code: '', year: new Date().getFullYear(), month: new Date().getMonth() + 1, quantity: 0, amount: 0, source: 'Manual' });
+      setForm({ item_code: '', warehouse_code: '', partner_code: '', year: currentYear, month: currentMonth, quantity: 0, amount: 0, source: 'Manual' });
     } catch (e) { addToast('error', 'Failed to create', (e as Error).message); }
     finally { setSaving(false); }
   };
@@ -66,22 +73,36 @@ export default function SalesEntryPage() {
   };
 
   const filterCfg: FilterConfig[] = [
-    { key: 'year', label: 'Year', options: [
+    { key: 'year', label: 'Year', defaultValue: String(currentYear), options: [
       { value: '', label: 'All Years' },
       { value: '2026', label: '2026' }, { value: '2025', label: '2025' },
       { value: '2024', label: '2024' },
     ]},
-    { key: 'warehouse_code', label: 'Warehouse', options: [
-      { value: '', label: 'All Warehouses' },
-      { value: 'WH-HCM1', label: 'WH-HCM1' }, { value: 'WH-HN1', label: 'WH-HN1' },
-      { value: 'WH-DN1', label: 'WH-DN1' }, { value: 'WH-BD1', label: 'WH-BD1' },
+    { key: 'month', label: 'Month', defaultValue: String(currentMonth), options: [
+      { value: '', label: 'All Months' },
+      { value: '1', label: '01 - January' },
+      { value: '2', label: '02 - February' },
+      { value: '3', label: '03 - March' },
+      { value: '4', label: '04 - April' },
+      { value: '5', label: '05 - May' },
+      { value: '6', label: '06 - June' },
+      { value: '7', label: '07 - July' },
+      { value: '8', label: '08 - August' },
+      { value: '9', label: '09 - September' },
+      { value: '10', label: '10 - October' },
+      { value: '11', label: '11 - November' },
+      { value: '12', label: '12 - December' },
     ]},
   ];
 
   const columns: Column<ActualSales>[] = [
+    { key: 'brand', header: 'BRAND', render: r => r.brand || '—' },
+    { key: 'item_group_name', header: 'ITEM GROUP', render: r => r.item_group_name || '—' },
     { key: 'item_code', header: 'ITEM CODE', render: r => <span className="badge badge-info">{r.item_code}</span> },
-    { key: 'warehouse_code', header: 'WAREHOUSE' },
-    { key: 'partner_code', header: 'PARTNER', render: r => r.partner_code || '—' },
+    { key: 'item_name', header: 'ITEM NAME', render: r => r.item_name || '—' },
+    { key: 'item_uom', header: 'ITEM UOM', render: r => r.item_uom || '—' },
+    { key: 'channel', header: 'CHANNEL', render: r => r.channel || '—' },
+    { key: 'partner_code', header: 'PARTNER', render: r => r.partner_name || r.partner_code || '—' },
     { key: 'year', header: 'YEAR' },
     { key: 'month', header: 'MONTH', render: r => String(r.month).padStart(2, '0') },
     { key: 'quantity', header: 'QUANTITY', render: r => r.quantity.toLocaleString() },
