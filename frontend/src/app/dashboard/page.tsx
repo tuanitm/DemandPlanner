@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell, ResponsiveContainer
@@ -37,7 +38,21 @@ const tooltipStyle = {
   color: '#f1f5f9',
 };
 
+const monthNames = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 export default function ExecutiveDashboard() {
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1; // 1-indexed
+  const currentQuarter = `Q${Math.ceil(currentMonth / 3)}`;
+
+  const [viewMode, setViewMode] = useState<'monthly' | 'quarterly'>('monthly');
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [selectedQuarter, setSelectedQuarter] = useState(currentQuarter);
+
   return (
     <div className="animate-in">
       {/* Page Header */}
@@ -46,17 +61,54 @@ export default function ExecutiveDashboard() {
           <h1 className="page-title">Executive Summary</h1>
           <p className="page-description">Overview of demand planning performance and inventory health</p>
         </div>
-        <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
-          <select className="form-input form-select" style={{ width: 140 }} defaultValue="2026">
-            <option value="2026">2026</option>
-            <option value="2025">2025</option>
+        <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
+          <select
+            className="form-input form-select"
+            style={{ width: 140 }}
+            value={viewMode}
+            onChange={(e) => setViewMode(e.target.value as 'monthly' | 'quarterly')}
+            id="select-view-mode"
+          >
+            <option value="monthly">By Month</option>
+            <option value="quarterly">By Quarter</option>
           </select>
-          <select className="form-input form-select" style={{ width: 140 }} defaultValue="Q2">
-            <option value="Q1">Q1</option>
-            <option value="Q2">Q2</option>
-            <option value="Q3">Q3</option>
-            <option value="Q4">Q4</option>
+          <select
+            className="form-input form-select"
+            style={{ width: 140 }}
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            id="select-year"
+          >
+            <option value={currentYear + 1}>{currentYear + 1}</option>
+            <option value={currentYear}>{currentYear}</option>
+            <option value={currentYear - 1}>{currentYear - 1}</option>
           </select>
+          {viewMode === 'monthly' ? (
+            <select
+              className="form-input form-select"
+              style={{ width: 160 }}
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              id="select-month"
+            >
+              {monthNames.map((name, i) => (
+                <option key={i + 1} value={i + 1}>{name}</option>
+              ))}
+            </select>
+          ) : (
+            <select
+              className="form-input form-select"
+              style={{ width: 140 }}
+              value={selectedQuarter}
+              onChange={(e) => setSelectedQuarter(e.target.value)}
+              id="select-quarter"
+            >
+              <option value="Q1">Q1</option>
+              <option value="Q2">Q2</option>
+              <option value="Q3">Q3</option>
+              <option value="Q4">Q4</option>
+            </select>
+          )}
           <button className="btn btn-primary">
             Export Excel
           </button>

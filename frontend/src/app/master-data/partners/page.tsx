@@ -38,6 +38,9 @@ export default function PartnersPage() {
   const [deleteTarget, setDeleteTarget] = useState<PartnerGroup | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
+  const [deletePartnerTarget, setDeletePartnerTarget] = useState<Partner | null>(null);
+
   const [groupForm, setGroupForm] = useState({
     channel: 'Domestic', partner_grp_type: 'Customer',
     partner_grp_code: '', partner_grp_name: '', status: 'Active',
@@ -95,11 +98,29 @@ export default function PartnersPage() {
   const handleSavePartner = async () => {
     setSaving(true);
     try {
-      await masterDataApi.partners.create(partnerForm as unknown as Partner);
-      addToast('success', 'Partner created');
-      setShowPartnerModal(false); fetchPartners();
+      if (editingPartner) {
+        await masterDataApi.partners.update(editingPartner.partner_code, {
+          partner_grp_code: partnerForm.partner_grp_code, partner_name: partnerForm.partner_name,
+          partner_mst_code: partnerForm.partner_mst_code, partner_address: partnerForm.partner_address, status: partnerForm.status,
+        });
+        addToast('success', 'Partner updated');
+      } else {
+        await masterDataApi.partners.create(partnerForm as unknown as Partner);
+        addToast('success', 'Partner created');
+      }
+      setShowPartnerModal(false); setEditingPartner(null); fetchPartners();
     } catch (e) { addToast('error', 'Save failed', (e as Error).message); }
     finally { setSaving(false); }
+  };
+
+  const handleDeletePartner = async () => {
+    if (!deletePartnerTarget) return;
+    setDeleting(true);
+    try {
+      await masterDataApi.partners.delete(deletePartnerTarget.partner_code);
+      addToast('success', 'Partner deleted'); setDeletePartnerTarget(null); fetchPartners();
+    } catch (e) { addToast('error', 'Delete failed', (e as Error).message); }
+    finally { setDeleting(false); }
   };
 
   const handleDeleteGroup = async () => {
@@ -125,7 +146,14 @@ export default function PartnersPage() {
   };
 
   const openCreatePartner = () => {
+    setEditingPartner(null);
     setPartnerForm({ partner_grp_code: '', partner_code: '', partner_name: '', partner_mst_code: '', partner_address: '', status: 'Active' });
+    setShowPartnerModal(true);
+  };
+
+  const openEditPartner = (p: Partner) => {
+    setEditingPartner(p);
+    setPartnerForm({ partner_grp_code: p.partner_grp_code, partner_code: p.partner_code, partner_name: p.partner_name, partner_mst_code: p.partner_mst_code || '', partner_address: p.partner_address || '', status: p.status });
     setShowPartnerModal(true);
   };
 
@@ -149,6 +177,12 @@ export default function PartnersPage() {
     { key: 'partner_grp_code', header: 'Group', width: '130px' },
     { key: 'partner_mst_code', header: 'Tax Code', width: '120px', render: (r) => r.partner_mst_code || <span style={{ color: 'var(--color-text-muted)' }}>—</span> },
     { key: 'status', header: 'Status', width: '100px', render: (r) => <span className={`badge ${r.status === 'Active' ? 'badge-success' : 'badge-warning'}`}>{r.status}</span> },
+    { key: 'actions', header: '', width: '80px', render: (r) => (
+      <div className="table-actions">
+        <button className="table-action-btn" onClick={() => openEditPartner(r)}><Edit2 size={14} /></button>
+        <button className="table-action-btn danger" onClick={() => setDeletePartnerTarget(r)}><Trash2 size={14} /></button>
+      </div>
+    )},
   ];
 
   const partnerFilterConfig: FilterConfig[] = [
@@ -202,11 +236,11 @@ export default function PartnersPage() {
         <div className="form-group"><label className="form-label">Status</label><select className="form-input form-select" value={groupForm.status} onChange={(e) => setGroupForm({ ...groupForm, status: e.target.value })}><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
       </Modal>
 
-      <Modal isOpen={showPartnerModal} onClose={() => setShowPartnerModal(false)} title="New Partner" size="lg"
-        footer={<><button className="btn btn-secondary" onClick={() => setShowPartnerModal(false)}>Cancel</button><button className="btn btn-primary" onClick={handleSavePartner} disabled={saving}>{saving && <span className="loading-spinner" />}Create</button></>}>
+      <Modal isOpen={showPartnerModal} onClose={() => { setShowPartnerModal(false); setEditingPartner(null); }} title={editingPartner ? 'Edit Partner' : 'New Partner'} size="lg"
+        footer={<><button className="btn btn-secondary" onClick={() => { setShowPartnerModal(false); setEditingPartner(null); }}>Cancel</button><button className="btn btn-primary" onClick={handleSavePartner} disabled={saving}>{saving && <span className="loading-spinner" />}{editingPartner ? 'Update' : 'Create'}</button></>}>
         <div className="form-row form-row-2">
           <div className="form-group"><label className="form-label">Partner Group *</label><select className="form-input form-select" value={partnerForm.partner_grp_code} onChange={(e) => setPartnerForm({ ...partnerForm, partner_grp_code: e.target.value })}><option value="">Select group...</option>{groups.map(g => <option key={g.partner_grp_code} value={g.partner_grp_code}>{g.partner_grp_name}</option>)}</select></div>
-          <div className="form-group"><label className="form-label">Code *</label><input className="form-input" placeholder="e.g. BP-001" value={partnerForm.partner_code} onChange={(e) => setPartnerForm({ ...partnerForm, partner_code: e.target.value })} /></div>
+          <div className="form-group"><label className="form-label">Code *</label><input className="form-input" placeholder="e.g. BP-001" value={partnerForm.partner_code} onChange={(e) => setPartnerForm({ ...partnerForm, partner_code: e.target.value })} disabled={!!editingPartner} /></div>
         </div>
         <div className="form-row form-row-2">
           <div className="form-group"><label className="form-label">Name *</label><input className="form-input" placeholder="Business name" value={partnerForm.partner_name} onChange={(e) => setPartnerForm({ ...partnerForm, partner_name: e.target.value })} /></div>
@@ -218,6 +252,9 @@ export default function PartnersPage() {
 
       <ConfirmDialog isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDeleteGroup} loading={deleting}
         title="Delete Partner Group" message={`Delete "${deleteTarget?.partner_grp_name}"? Partners in this group may be affected.`} />
+
+      <ConfirmDialog isOpen={!!deletePartnerTarget} onClose={() => setDeletePartnerTarget(null)} onConfirm={handleDeletePartner} loading={deleting}
+        title="Delete Partner" message={`Are you sure you want to delete "${deletePartnerTarget?.partner_name}"?`} />
     </div>
   );
 }

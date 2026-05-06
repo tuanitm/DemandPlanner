@@ -116,7 +116,8 @@ export interface Item {
   uom: string;
   item_type: string;
   status: string;
-  lead_time_days: number;
+  import_lead_time_days: number;
+  production_lead_time_days: number;
   created_at: string;
   updated_at: string;
 }
@@ -194,6 +195,10 @@ export const masterDataApi = {
       api.get<PaginatedResponse<Partner>>(`/api/master-data/partners${buildQuery(params)}`),
     create: (data: Omit<Partner, 'id' | 'created_at' | 'updated_at'>) =>
       api.post<Partner>('/api/master-data/partners', data),
+    update: (code: string, data: Partial<Partner>) =>
+      api.put<Partner>(`/api/master-data/partners/${code}`, data),
+    delete: (code: string) =>
+      api.delete<MessageResponse>(`/api/master-data/partners/${code}`),
   },
 
   // Product Hierarchy
@@ -202,6 +207,10 @@ export const masterDataApi = {
       api.get<PaginatedResponse<ProductHierarchy>>(`/api/master-data/product-hierarchy${buildQuery(params)}`),
     create: (data: Omit<ProductHierarchy, 'id' | 'created_at' | 'updated_at'>) =>
       api.post<ProductHierarchy>('/api/master-data/product-hierarchy', data),
+    update: (code: string, data: Partial<ProductHierarchy>) =>
+      api.put<ProductHierarchy>(`/api/master-data/product-hierarchy/${code}`, data),
+    delete: (code: string) =>
+      api.delete<MessageResponse>(`/api/master-data/product-hierarchy/${code}`),
   },
 
   // Items / SKUs
@@ -210,6 +219,10 @@ export const masterDataApi = {
       api.get<PaginatedResponse<Item>>(`/api/master-data/items${buildQuery(params)}`),
     create: (data: Omit<Item, 'id' | 'created_at' | 'updated_at'>) =>
       api.post<Item>('/api/master-data/items', data),
+    update: (code: string, data: Partial<Item>) =>
+      api.put<Item>(`/api/master-data/items/${code}`, data),
+    delete: (code: string) =>
+      api.delete<MessageResponse>(`/api/master-data/items/${code}`),
   },
 
   // BOM
@@ -255,6 +268,13 @@ export interface ActualSales {
   amount: number;
   source: string;
   created_at: string;
+  // Enriched fields from JOINs
+  item_name?: string;
+  item_uom?: string;
+  brand?: string;
+  item_group_name?: string;
+  partner_name?: string;
+  channel?: string;
 }
 
 export interface InventoryOnhand {
@@ -499,11 +519,11 @@ export interface MonthlyComparison {
 // ──────────────────────────────────────────────
 
 export const forecastApi = {
-  generate: (params: { item_codes?: string[]; warehouse_codes?: string[]; horizon_months?: number } = {}) =>
+  generate: (params: { item_codes?: string[]; warehouse_codes?: string[]; horizon_months?: number; start_year?: number; start_month?: number } = {}) =>
     api.post<ForecastGenerateResponse>('/api/forecast/generate', params),
 
-  generateAsync: (params: { item_codes?: string[]; warehouse_codes?: string[]; horizon_months?: number } = {}) =>
-    api.post<ForecastGenerateResponse>('/api/forecast/generate?async_mode=true', params),
+  generateAsync: (params: { item_codes?: string[]; warehouse_codes?: string[]; horizon_months?: number; start_year?: number; start_month?: number } = {}) =>
+    api.post<{ message: string; task_id: string; status: string }>('/api/forecast/generate?async_mode=true', params),
 
   taskStatus: (taskId: string) =>
     api.get<{ task_id: string; status: string; result?: unknown; error?: string }>(`/api/forecast/task/${taskId}`),

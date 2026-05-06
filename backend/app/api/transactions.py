@@ -38,16 +38,48 @@ async def list_sales(
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user),
 ):
-    q = select(ActualSales)
+    from app.models.master_data import Item, ProductHierarchy, Partner, PartnerGroup
+
+    q = (
+        select(
+            ActualSales,
+            Item.item_name,
+            Item.uom.label("item_uom"),
+            ProductHierarchy.brand,
+            ProductHierarchy.item_group_name,
+            Partner.partner_name,
+            PartnerGroup.channel,
+        )
+        .outerjoin(Item, ActualSales.item_code == Item.item_code)
+        .outerjoin(ProductHierarchy, Item.item_group_code == ProductHierarchy.item_group_code)
+        .outerjoin(Partner, ActualSales.partner_code == Partner.partner_code)
+        .outerjoin(PartnerGroup, Partner.partner_grp_code == PartnerGroup.partner_grp_code)
+    )
     if item_code: q = q.where(ActualSales.item_code == item_code)
     if warehouse_code: q = q.where(ActualSales.warehouse_code == warehouse_code)
     if year: q = q.where(ActualSales.year == year)
     if month: q = q.where(ActualSales.month == month)
-    if search: q = q.where(ActualSales.item_code.contains(search))
+    if search: q = q.where(ActualSales.item_code.contains(search) | Item.item_name.contains(search))
     q = q.order_by(ActualSales.year.desc(), ActualSales.month.desc(), ActualSales.id.desc())
-    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar()
+
+    count_q = select(func.count()).select_from(q.subquery())
+    total = (await db.execute(count_q)).scalar()
     result = await db.execute(q.offset((page-1)*page_size).limit(page_size))
-    return PaginatedResponse(items=[ActualSalesResponse.model_validate(r) for r in result.scalars().all()], total=total, page=page, page_size=page_size)
+    rows = result.all()
+
+    items = []
+    for row in rows:
+        sale = row[0]
+        d = ActualSalesResponse.model_validate(sale).model_dump()
+        d["item_name"] = row.item_name or ""
+        d["item_uom"] = row.item_uom or ""
+        d["brand"] = row.brand or ""
+        d["item_group_name"] = row.item_group_name or ""
+        d["partner_name"] = row.partner_name or ""
+        d["channel"] = str(row.channel.value) if row.channel else ""
+        items.append(d)
+
+    return PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
 
 @router.post("/sales", response_model=ActualSalesResponse, status_code=201)
 async def create_sales(data: ActualSalesCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

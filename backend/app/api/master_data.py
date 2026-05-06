@@ -10,7 +10,11 @@ from app.models.master_data import (
     PartnerGroup, Partner, ProductHierarchy, Item,
     BillOfMaterial, Warehouse, ExchangeRate
 )
-from app.models.forecasts import User
+from app.models.transactions import (
+    ActualSales, InventoryOnhand, PurchaseOrder, ProductionOrder,
+    StockInTransaction, DemandAdhoc
+)
+from app.models.forecasts import User, ForecastResult, SupplyRecommendation
 from app.schemas.schemas import (
     PartnerGroupCreate, PartnerGroupUpdate, PartnerGroupResponse,
     PartnerCreate, PartnerUpdate, PartnerResponse,
@@ -60,6 +64,12 @@ async def delete_partner_group(code: str, db: AsyncSession = Depends(get_db), cu
     result = await db.execute(select(PartnerGroup).where(PartnerGroup.partner_grp_code == code))
     obj = result.scalar_one_or_none()
     if not obj: raise HTTPException(status_code=404, detail="Not found")
+    
+    # Data Integrity Check
+    count = (await db.execute(select(func.count()).select_from(Partner).where(Partner.partner_grp_code == code))).scalar()
+    if count > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete partner group because it contains child partners.")
+        
     await db.delete(obj)
     return MessageResponse(message="Deleted")
 
@@ -84,6 +94,30 @@ async def create_partner(data: PartnerCreate, db: AsyncSession = Depends(get_db)
     obj = Partner(**data.model_dump()); db.add(obj); await db.flush(); await db.refresh(obj)
     return PartnerResponse.model_validate(obj)
 
+@router.put("/partners/{code}", response_model=PartnerResponse)
+async def update_partner(code: str, data: PartnerUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Partner).where(Partner.partner_code == code))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    for k, v in data.model_dump(exclude_unset=True).items(): setattr(obj, k, v)
+    await db.flush(); await db.refresh(obj)
+    return PartnerResponse.model_validate(obj)
+
+@router.delete("/partners/{code}", response_model=MessageResponse)
+async def delete_partner(code: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Partner).where(Partner.partner_code == code))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    
+    # Data Integrity Check
+    sales_count = (await db.execute(select(func.count()).select_from(ActualSales).where(ActualSales.partner_code == code))).scalar()
+    po_count = (await db.execute(select(func.count()).select_from(PurchaseOrder).where(PurchaseOrder.partner_code == code))).scalar()
+    if sales_count > 0 or po_count > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete partner because it has associated transactions.")
+        
+    await db.delete(obj)
+    return MessageResponse(message="Deleted")
+
 
 # ── Product Hierarchy ──
 
@@ -106,6 +140,29 @@ async def create_product_hierarchy(data: ProductHierarchyCreate, db: AsyncSessio
     obj = ProductHierarchy(**data.model_dump()); db.add(obj); await db.flush(); await db.refresh(obj)
     return ProductHierarchyResponse.model_validate(obj)
 
+@router.put("/product-hierarchy/{code}", response_model=ProductHierarchyResponse)
+async def update_product_hierarchy(code: str, data: ProductHierarchyUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(ProductHierarchy).where(ProductHierarchy.item_group_code == code))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    for k, v in data.model_dump(exclude_unset=True).items(): setattr(obj, k, v)
+    await db.flush(); await db.refresh(obj)
+    return ProductHierarchyResponse.model_validate(obj)
+
+@router.delete("/product-hierarchy/{code}", response_model=MessageResponse)
+async def delete_product_hierarchy(code: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(ProductHierarchy).where(ProductHierarchy.item_group_code == code))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    
+    # Data Integrity Check
+    count = (await db.execute(select(func.count()).select_from(Item).where(Item.item_group_code == code))).scalar()
+    if count > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete item group because it contains child items.")
+        
+    await db.delete(obj)
+    return MessageResponse(message="Deleted")
+
 
 # ── Items ──
 
@@ -127,6 +184,35 @@ async def list_items(
 async def create_item(data: ItemCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     obj = Item(**data.model_dump()); db.add(obj); await db.flush(); await db.refresh(obj)
     return ItemResponse.model_validate(obj)
+
+@router.put("/items/{code}", response_model=ItemResponse)
+async def update_item(code: str, data: ItemUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Item).where(Item.item_code == code))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    for k, v in data.model_dump(exclude_unset=True).items(): setattr(obj, k, v)
+    await db.flush(); await db.refresh(obj)
+    return ItemResponse.model_validate(obj)
+
+@router.delete("/items/{code}", response_model=MessageResponse)
+async def delete_item(code: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Item).where(Item.item_code == code))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    
+    # Data Integrity Check
+    for model in [ActualSales, InventoryOnhand, PurchaseOrder, ProductionOrder, StockInTransaction, DemandAdhoc]:
+        count = (await db.execute(select(func.count()).select_from(model).where(model.item_code == code))).scalar()
+        if count > 0:
+            raise HTTPException(status_code=400, detail="Cannot delete item because it has associated transactions or inventory.")
+            
+    bom_fg = (await db.execute(select(func.count()).select_from(BillOfMaterial).where(BillOfMaterial.finished_goods_item_code == code))).scalar()
+    bom_rm = (await db.execute(select(func.count()).select_from(BillOfMaterial).where(BillOfMaterial.raw_material_item_code == code))).scalar()
+    if bom_fg > 0 or bom_rm > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete item because it is part of a Bill of Materials.")
+        
+    await db.delete(obj)
+    return MessageResponse(message="Deleted")
 
 
 # ── BOM ──
@@ -152,6 +238,14 @@ async def create_bom_bulk(data: List[BOMCreate], db: AsyncSession = Depends(get_
         results.append(BOMResponse.model_validate(obj))
     return results
 
+@router.delete("/bom/{bom_id}", response_model=MessageResponse)
+async def delete_bom(bom_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(BillOfMaterial).where(BillOfMaterial.id == bom_id))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    await db.delete(obj)
+    return MessageResponse(message="Deleted")
+
 
 # ── Warehouses ──
 
@@ -173,6 +267,30 @@ async def create_warehouse(data: WarehouseCreate, db: AsyncSession = Depends(get
     obj = Warehouse(**data.model_dump()); db.add(obj); await db.flush(); await db.refresh(obj)
     return WarehouseResponse.model_validate(obj)
 
+@router.put("/warehouses/{code}", response_model=WarehouseResponse)
+async def update_warehouse(code: str, data: WarehouseUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Warehouse).where(Warehouse.warehouse_code == code))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    for k, v in data.model_dump(exclude_unset=True).items(): setattr(obj, k, v)
+    await db.flush(); await db.refresh(obj)
+    return WarehouseResponse.model_validate(obj)
+
+@router.delete("/warehouses/{code}", response_model=MessageResponse)
+async def delete_warehouse(code: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Warehouse).where(Warehouse.warehouse_code == code))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    
+    # Data Integrity Check
+    for model in [ActualSales, InventoryOnhand, PurchaseOrder, ProductionOrder, StockInTransaction, DemandAdhoc]:
+        count = (await db.execute(select(func.count()).select_from(model).where(model.warehouse_code == code))).scalar()
+        if count > 0:
+            raise HTTPException(status_code=400, detail="Cannot delete warehouse because it is in use by transactions or inventory.")
+            
+    await db.delete(obj)
+    return MessageResponse(message="Deleted")
+
 
 # ── Exchange Rates ──
 
@@ -187,3 +305,20 @@ async def list_exchange_rates(year: Optional[int] = None, db: AsyncSession = Dep
 async def create_exchange_rate(data: ExchangeRateCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     obj = ExchangeRate(**data.model_dump()); db.add(obj); await db.flush(); await db.refresh(obj)
     return ExchangeRateResponse.model_validate(obj)
+
+@router.put("/exchange-rates/{rate_id}", response_model=ExchangeRateResponse)
+async def update_exchange_rate(rate_id: int, data: ExchangeRateCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(ExchangeRate).where(ExchangeRate.id == rate_id))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    for k, v in data.model_dump(exclude_unset=True).items(): setattr(obj, k, v)
+    await db.flush(); await db.refresh(obj)
+    return ExchangeRateResponse.model_validate(obj)
+
+@router.delete("/exchange-rates/{rate_id}", response_model=MessageResponse)
+async def delete_exchange_rate(rate_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(ExchangeRate).where(ExchangeRate.id == rate_id))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    await db.delete(obj)
+    return MessageResponse(message="Deleted")

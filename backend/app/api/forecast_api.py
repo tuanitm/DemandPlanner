@@ -43,6 +43,8 @@ async def generate_forecast(
             item_codes=request.item_codes,
             warehouse_codes=request.warehouse_codes,
             horizon=request.horizon_months,
+            start_year=request.start_year,
+            start_month=request.start_month,
         )
         return {
             "message": "Forecast pipeline dispatched to background worker",
@@ -60,6 +62,8 @@ async def generate_forecast(
         item_codes=request.item_codes,
         warehouse_codes=request.warehouse_codes,
         horizon=request.horizon_months,
+        start_year=request.start_year,
+        start_month=request.start_month,
     )
 
     # Generate supply recommendations

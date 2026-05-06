@@ -434,6 +434,8 @@ class ForecastGenerateRequest(BaseModel):
     item_codes: Optional[List[str]] = None  # None = all items
     warehouse_codes: Optional[List[str]] = None
     horizon_months: int = 6
+    start_year: Optional[int] = None
+    start_month: Optional[int] = None
 
 class ForecastResultResponse(BaseModel):
     id: int

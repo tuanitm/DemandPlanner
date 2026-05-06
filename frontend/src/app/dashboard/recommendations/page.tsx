@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Brain, ShoppingCart, Factory, Package, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { forecastApi, RecommendationsSummary, RecommendationItem } from '@/lib/api';
+import Modal from '@/components/ui/Modal';
 
 function RiskBadge({ risk }: { risk: string }) {
   const cls =
@@ -19,6 +20,13 @@ export default function RecommendationsPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [genResult, setGenResult] = useState<string | null>(null);
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  
+  const currentYear = new Date().getFullYear();
+  const nextMonth = new Date().getMonth() + 2; // 0-indexed, so +2 for next month
+  
+  const [targetYear, setTargetYear] = useState<number>(nextMonth > 12 ? currentYear + 1 : currentYear);
+  const [targetMonth, setTargetMonth] = useState<number>(nextMonth > 12 ? 1 : nextMonth);
 
   const fetchData = useCallback(async () => {
     try {
@@ -46,9 +54,14 @@ export default function RecommendationsPage() {
   const handleGenerate = async () => {
     try {
       setGenerating(true);
+      setIsGenerateModalOpen(false);
       setGenResult(null);
       setError(null);
-      const result = await forecastApi.generate({ horizon_months: 6 });
+      const result = await forecastApi.generate({ 
+        horizon_months: 6,
+        start_year: targetYear,
+        start_month: targetMonth
+      });
       const fc = result.forecast;
       const sp = result.supply;
       setGenResult(
@@ -80,7 +93,7 @@ export default function RecommendationsPage() {
         <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
           <button
             className="btn btn-primary"
-            onClick={handleGenerate}
+            onClick={() => setIsGenerateModalOpen(true)}
             disabled={generating}
             id="btn-generate-forecast"
           >
@@ -128,7 +141,7 @@ export default function RecommendationsPage() {
           <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--space-6)' }}>
             Click &quot;Generate Forecast&quot; to run the AI engine and produce supply recommendations.
           </p>
-          <button className="btn btn-primary" onClick={handleGenerate} disabled={generating}>
+          <button className="btn btn-primary" onClick={() => setIsGenerateModalOpen(true)} disabled={generating}>
             <Brain size={16} /> Generate Forecast Now
           </button>
         </div>
@@ -270,6 +283,39 @@ export default function RecommendationsPage() {
           )}
         </>
       )}
+
+      <Modal isOpen={isGenerateModalOpen} onClose={() => setIsGenerateModalOpen(false)} title="Generate AI Forecast">
+        <div style={{ marginBottom: 'var(--space-4)' }}>
+          <p style={{ marginBottom: 'var(--space-4)', color: 'var(--color-text-secondary)' }}>
+            Select the Target Month and Year from which the forecast should begin. The AI engine will compute a 6-month forecast starting from this date.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
+            <div className="form-group">
+              <label className="form-label">Target Year</label>
+              <select className="form-input" value={targetYear} onChange={(e) => setTargetYear(Number(e.target.value))}>
+                <option value={currentYear - 1}>{currentYear - 1}</option>
+                <option value={currentYear}>{currentYear}</option>
+                <option value={currentYear + 1}>{currentYear + 1}</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Target Month</label>
+              <select className="form-input" value={targetMonth} onChange={(e) => setTargetMonth(Number(e.target.value))}>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                  <option key={m} value={m}>{new Date(2000, m - 1, 1).toLocaleString('default', { month: 'long' })}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)' }}>
+          <button className="btn btn-secondary" onClick={() => setIsGenerateModalOpen(false)}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleGenerate} disabled={generating}>
+            {generating ? <Loader2 size={16} className="spin" /> : <Brain size={16} />}
+            Run Forecast
+          </button>
+        </div>
+      </Modal>
 
       <style jsx>{`
         .spin {

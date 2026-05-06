@@ -34,6 +34,8 @@ async def _run_forecast_async(
     item_codes: Optional[list[str]] = None,
     warehouse_codes: Optional[list[str]] = None,
     horizon: int = 6,
+    start_year: Optional[int] = None,
+    start_month: Optional[int] = None,
 ) -> dict:
     """Async forecast generation for use within Celery task."""
     from app.database import async_session_factory
@@ -46,6 +48,8 @@ async def _run_forecast_async(
                 item_codes=item_codes,
                 warehouse_codes=warehouse_codes,
                 horizon=horizon,
+                start_year=start_year,
+                start_month=start_month,
             )
             await db.commit()
             return result
@@ -90,6 +94,8 @@ def run_forecast_task(
     item_codes: Optional[list[str]] = None,
     warehouse_codes: Optional[list[str]] = None,
     horizon: int = 6,
+    start_year: Optional[int] = None,
+    start_month: Optional[int] = None,
 ) -> dict:
     """
     Celery task: Generate forecasts.
@@ -101,12 +107,12 @@ def run_forecast_task(
     """
     logger.info(
         f"Starting forecast task: items={item_codes}, "
-        f"warehouses={warehouse_codes}, horizon={horizon}"
+        f"warehouses={warehouse_codes}, horizon={horizon}, start={start_year}-{start_month}"
     )
     try:
         loop = _get_event_loop()
         result = loop.run_until_complete(
-            _run_forecast_async(item_codes, warehouse_codes, horizon)
+            _run_forecast_async(item_codes, warehouse_codes, horizon, start_year, start_month)
         )
         logger.info(f"Forecast task completed: {result.get('message', '')}")
         return result
@@ -158,6 +164,8 @@ def run_full_pipeline_task(
     item_codes: Optional[list[str]] = None,
     warehouse_codes: Optional[list[str]] = None,
     horizon: int = 6,
+    start_year: Optional[int] = None,
+    start_month: Optional[int] = None,
 ) -> dict:
     """
     Celery task: Run the full forecast + supply planning pipeline.
@@ -170,7 +178,7 @@ def run_full_pipeline_task(
 
         # Step 1: Generate forecasts
         forecast_result = loop.run_until_complete(
-            _run_forecast_async(item_codes, warehouse_codes, horizon)
+            _run_forecast_async(item_codes, warehouse_codes, horizon, start_year, start_month)
         )
         logger.info(f"Forecasts generated: {forecast_result.get('forecast_count', 0)}")
 

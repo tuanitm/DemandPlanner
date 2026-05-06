@@ -40,6 +40,8 @@ async def generate_forecasts(
     item_codes: Optional[list[str]] = None,
     warehouse_codes: Optional[list[str]] = None,
     horizon: int = None,
+    start_year: Optional[int] = None,
+    start_month: Optional[int] = None,
 ) -> dict:
     """
     Main entry point: generate forecasts for all SKU-warehouse combinations.
@@ -104,25 +106,43 @@ async def generate_forecasts(
     model_weights_log = {}
 
     for (item_code, warehouse_code), data_points in grouped.items():
+        if start_year and start_month:
+            target_absolute = start_year * 12 + start_month
+            data_points = [dp for dp in data_points if (dp["year"] * 12 + dp["month"]) < target_absolute]
+            
+        if not data_points:
+            continue
+            
         series = [d["qty"] for d in data_points]
-        start_year = data_points[0]["year"]
-        start_month = data_points[0]["month"]
+        actual_start_year = data_points[0]["year"]
+        actual_start_month = data_points[0]["month"]
         last = data_points[-1]
         last_year, last_month = last["year"], last["month"]
 
+        effective_horizon = horizon
+        slice_start = 0
+        
+        if start_year and start_month:
+            target_absolute = start_year * 12 + start_month
+            last_absolute = last_year * 12 + last_month
+            if target_absolute > last_absolute + 1:
+                gap = target_absolute - (last_absolute + 1)
+                effective_horizon = gap + horizon
+                slice_start = gap
+
         logger.info(
             f"Forecasting {item_code}@{warehouse_code}: "
-            f"{len(series)} months of data, horizon={horizon}"
+            f"{len(series)} months of data, effective_horizon={effective_horizon}, slice={slice_start}"
         )
 
         # ── Run individual base models ──
         individual_results = _run_base_models(
-            series, horizon, start_year, start_month
+            series, effective_horizon, actual_start_year, actual_start_month
         )
 
         # ── Run stacking ensemble ──
         ensemble_result = _run_ensemble(
-            series, horizon, start_year, start_month
+            series, effective_horizon, actual_start_year, actual_start_month
         )
 
         # Store model weights for reporting
@@ -141,23 +161,31 @@ async def generate_forecasts(
 
         for model_name, result_data in individual_results.items():
             mt = model_type_map.get(model_name, ModelType.ENSEMBLE)
-            for i, f_qty in enumerate(result_data["forecast"]):
-                y, m = _next_period(last_year, last_month, i + 1)
+            sliced_forecast = result_data["forecast"][slice_start:slice_start + horizon]
+            sliced_lower = result_data.get("lower", [])[slice_start:slice_start + horizon] if "lower" in result_data else []
+            sliced_upper = result_data.get("upper", [])[slice_start:slice_start + horizon] if "upper" in result_data else []
+            
+            for j, f_qty in enumerate(sliced_forecast):
+                y, m = _next_period(last_year, last_month, slice_start + j + 1)
                 model_detail_records.append(ForecastResult(
                     item_code=item_code,
                     warehouse_code=warehouse_code,
                     year=y, month=m,
                     model_type=mt,
                     forecast_qty=round(max(0, f_qty)),
-                    confidence_lower=round(result_data["lower"][i]) if i < len(result_data.get("lower", [])) else None,
-                    confidence_upper=round(result_data["upper"][i]) if i < len(result_data.get("upper", [])) else None,
+                    confidence_lower=round(sliced_lower[j]) if j < len(sliced_lower) else None,
+                    confidence_upper=round(sliced_upper[j]) if j < len(sliced_upper) else None,
                 ))
 
         # ── Save ensemble result ──
-        for i, f_qty in enumerate(ensemble_result["forecast"]):
-            y, m = _next_period(last_year, last_month, i + 1)
-            lower = ensemble_result["lower"][i] if i < len(ensemble_result.get("lower", [])) else None
-            upper = ensemble_result["upper"][i] if i < len(ensemble_result.get("upper", [])) else None
+        ens_sliced_forecast = ensemble_result["forecast"][slice_start:slice_start + horizon]
+        ens_sliced_lower = ensemble_result.get("lower", [])[slice_start:slice_start + horizon] if "lower" in ensemble_result else []
+        ens_sliced_upper = ensemble_result.get("upper", [])[slice_start:slice_start + horizon] if "upper" in ensemble_result else []
+        
+        for j, f_qty in enumerate(ens_sliced_forecast):
+            y, m = _next_period(last_year, last_month, slice_start + j + 1)
+            lower = ens_sliced_lower[j] if j < len(ens_sliced_lower) else None
+            upper = ens_sliced_upper[j] if j < len(ens_sliced_upper) else None
             all_forecast_records.append(ForecastResult(
                 item_code=item_code,
                 warehouse_code=warehouse_code,
