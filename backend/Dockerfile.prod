@@ -8,7 +8,8 @@ WORKDIR /build
 # System dependencies needed for building Python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    libpq-dev \
+    default-libmysqlclient-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -21,9 +22,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Runtime-only system dependencies
+# Runtime-only system dependencies (MySQL client libs)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
+    default-mysql-client \
+    libmariadb3 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -47,7 +49,7 @@ USER appuser
 
 EXPOSE 8000
 
-# Use Gunicorn with Uvicorn workers for production
+# Use Uvicorn with multiple workers for production
 CMD ["python", "-m", "uvicorn", "app.main:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
