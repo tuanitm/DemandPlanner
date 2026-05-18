@@ -1,0 +1,57 @@
+# ============================================
+# Stage 1: Build dependencies
+# ============================================
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# System dependencies needed for building Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ============================================
+# Stage 2: Production runtime
+# ============================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Runtime-only system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
+
+# Copy installed Python packages from builder stage
+COPY --from=builder /install /usr/local
+
+# Copy application source code
+COPY . .
+
+# Remove dev/test files from the image
+RUN rm -f *.db test_*.py fix_*.py update_*.py check_*.py migrate_*.py \
+    && rm -rf .venv .env __pycache__
+
+# Set ownership
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 8000
+
+# Use Gunicorn with Uvicorn workers for production
+CMD ["python", "-m", "uvicorn", "app.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "2", \
+     "--loop", "uvloop", \
+     "--http", "httptools", \
+     "--no-access-log"]

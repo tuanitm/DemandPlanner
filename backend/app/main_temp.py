@@ -70,7 +70,6 @@ app.include_router(master_data.router)
 app.include_router(transactions.router)
 app.include_router(import_export.router)
 app.include_router(forecast_api.router)
-app.include_router(dashboard.router)
 
 
 @app.get("/api/health")

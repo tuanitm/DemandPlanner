@@ -623,6 +623,44 @@ export const forecastApi = {
     api.get<{ items: Array<{ item_code: string; forecast_count: number }> }>(`/api/forecast/workflow/items${buildQuery({ search })}`),
 };
 
+// ──────────────────────────────────────────────
+// Dashboard Types & API
+// ──────────────────────────────────────────────
+
+export interface DashboardKPI {
+  label: string;
+  value: string;
+  change: string;
+  positive: boolean;
+  color: string;
+}
+
+export interface DashboardSalesPlan {
+  category: string;
+  plan: number;
+  actual: number;
+}
+
+export interface DashboardInventoryStructure {
+  name: string;
+  value: number;
+  color: string;
+}
+
+export interface DashboardSummaryResponse {
+  kpis: DashboardKPI[];
+  salesPlanData: DashboardSalesPlan[];
+  inventoryStructure: DashboardInventoryStructure[];
+  topSellingSKUs: string[][];
+  topInventorySKUs: string[][];
+}
+
+export const dashboardApi = {
+  summary: (params: { view_mode: string; year?: number; month?: number | number[]; quarter?: string }) =>
+    api.get<DashboardSummaryResponse>(`/api/dashboard/summary${buildQuery(params)}`),
+};
+
+
 
 // ──────────────────────────────────────────────
 // Workflow Types

@@ -38,7 +38,7 @@ const generateGranularData = (hierarchy: { brand: string; item_group_name: strin
   const regionList = ['North', 'Central', 'South'];
   const warehouseList = ['WH-HN1', 'WH-DN1', 'WH-HCM1'];
 
-  const data: { year: number, month: string, brandName: string, productGroup: string, skuName: string, channel: string, region: string, warehouse: string, forecast: number, actual: number }[] = [];
+  const data: { year: number, month: string, brandName: string, productGroup: string, skuCode: string, skuName: string, channel: string, region: string, warehouse: string, forecast: number, actual: number }[] = [];
 
   const brandList = [...brandMap.keys()];
   years.forEach(year => {
@@ -52,13 +52,14 @@ const generateGranularData = (hierarchy: { brand: string; item_group_name: strin
         groups.forEach((group, gIdx) => {
           // 2 mock SKUs per group
           for (let skuIdx = 0; skuIdx < 2; skuIdx++) {
-            const skuName = `${group} SKU-${gIdx + 1}${String.fromCharCode(65 + skuIdx)}`;
+            const skuCode = `SKU-${(bIdx + 1).toString().padStart(2, '0')}${(gIdx + 1).toString().padStart(2, '0')}${String.fromCharCode(65 + skuIdx)}`;
+            const skuName = `${group} Product ${String.fromCharCode(65 + skuIdx)}`;
             const pseudoRandom1 = ((mIdx * 13) + (bIdx * 7) + (gIdx * 5) + (skuIdx * 3) + year * 3) % 100 / 100;
             const pseudoRandom2 = ((mIdx * 17) + (bIdx * 11) + (gIdx * 7) + (skuIdx * 5) + year * 5) % 100 / 100;
             const skuForecast = Math.round((totalForecast / Math.max(1, groups.length * 2)) * (0.9 + pseudoRandom1 * 0.2));
             const skuActual = Math.round(skuForecast * (0.85 + pseudoRandom2 * 0.25));
             data.push({
-              year, month, brandName, productGroup: group, skuName,
+              year, month, brandName, productGroup: group, skuCode, skuName,
               channel: channelList[(bIdx + gIdx + skuIdx) % channelList.length],
               region: regionList[(bIdx + gIdx + skuIdx + 1) % regionList.length],
               warehouse: warehouseList[(bIdx + gIdx + skuIdx) % warehouseList.length],
@@ -86,6 +87,7 @@ interface FlatRow {
   key: string;
   brand: string;
   productGroup: string;
+  skuCode: string;
   skuName: string;
   channel: string;
   region: string;
@@ -179,7 +181,7 @@ export default function MonthlyComparisonPage() {
       if (productGroupFilter.length > 0 && !productGroupFilter.includes(item.productGroup)) return false;
       if (skuSearch) {
         const q = skuSearch.toLowerCase();
-        if (!item.skuName.toLowerCase().includes(q) && !item.brandName.toLowerCase().includes(q) && !item.productGroup.toLowerCase().includes(q)) return false;
+        if (!item.skuCode.toLowerCase().includes(q) && !item.skuName.toLowerCase().includes(q) && !item.brandName.toLowerCase().includes(q) && !item.productGroup.toLowerCase().includes(q)) return false;
       }
       return true;
     });
@@ -195,10 +197,10 @@ export default function MonthlyComparisonPage() {
     };
 
     filteredData.forEach(row => {
-      const key = `${row.brandName}|${row.productGroup}|${row.skuName}|${row.channel}|${row.region}|${row.warehouse}`;
+      const key = `${row.brandName}|${row.productGroup}|${row.skuCode}|${row.channel}|${row.region}|${row.warehouse}`;
       if (!map.has(key)) {
         map.set(key, {
-          key, brand: row.brandName, productGroup: row.productGroup, skuName: row.skuName,
+          key, brand: row.brandName, productGroup: row.productGroup, skuCode: row.skuCode, skuName: row.skuName,
           channel: row.channel, region: row.region, warehouse: row.warehouse,
           months: getEmptyMonths(),
         });
@@ -209,7 +211,7 @@ export default function MonthlyComparisonPage() {
       entry.months[row.month].variance = entry.months[row.month].actual - entry.months[row.month].forecast;
     });
 
-    return [...map.values()].sort((a, b) => a.brand.localeCompare(b.brand) || a.productGroup.localeCompare(b.productGroup) || a.skuName.localeCompare(b.skuName));
+    return [...map.values()].sort((a, b) => a.brand.localeCompare(b.brand) || a.productGroup.localeCompare(b.productGroup) || a.skuCode.localeCompare(b.skuCode));
   }, [filteredData]);
 
   // Aggregate for the Chart & KPIs (summing up all brands/groups)
@@ -238,15 +240,15 @@ export default function MonthlyComparisonPage() {
   [monthFilter]);
 
   const handleExportExcel = useCallback(() => {
-    const headerRow1 = ['Brand', 'Product Group', 'SKU', 'Channel', 'Region', 'Warehouse'];
-    const headerRow2 = ['', '', '', '', '', ''];
+    const headerRow1 = ['Brand', 'Product Group', 'SKU Code', 'SKU Name', 'Channel', 'Region', 'Warehouse'];
+    const headerRow2 = ['', '', '', '', '', '', ''];
     const merges = [
       { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }, { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } }, { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
-      { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } }, { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } }, { s: { r: 0, c: 5 }, e: { r: 1, c: 5 } }
+      { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } }, { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } }, { s: { r: 0, c: 5 }, e: { r: 1, c: 5 } }, { s: { r: 0, c: 6 }, e: { r: 1, c: 6 } }
     ];
     
     displayMonths.forEach((m, idx) => {
-      const startCol = 6 + (idx * 4);
+      const startCol = 7 + (idx * 4);
       merges.push({ s: { r: 0, c: startCol }, e: { r: 0, c: startCol + 3 } });
       headerRow1.push(m, '', '', '');
       headerRow2.push('Forecast', 'Actual', 'Variance', 'FA%');
@@ -256,7 +258,7 @@ export default function MonthlyComparisonPage() {
     
     flatRows.forEach(row => {
       const rowData: any[] = [
-        row.brand, row.productGroup, row.skuName,
+        row.brand, row.productGroup, row.skuCode, row.skuName,
         row.channel, row.region, row.warehouse
       ];
       displayMonths.forEach(m => {
@@ -270,8 +272,8 @@ export default function MonthlyComparisonPage() {
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!merges'] = merges;
     
-    const colCount = 6 + displayMonths.length * 4;
-    const cols = [{ wch: 20 }, { wch: 22 }, { wch: 30 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
+    const colCount = 7 + displayMonths.length * 4;
+    const cols = [{ wch: 20 }, { wch: 22 }, { wch: 15 }, { wch: 30 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
     for(let i=0; i<displayMonths.length * 4; i++) cols.push({ wch: 12 });
     ws['!cols'] = cols;
 
@@ -288,7 +290,7 @@ export default function MonthlyComparisonPage() {
     flatRows.forEach((row, rowIdx) => {
       const dataRow = rowIdx + 2; // +2 for two header rows
       displayMonths.forEach((m, mIdx) => {
-        const forecastCol = 6 + (mIdx * 4);
+        const forecastCol = 7 + (mIdx * 4);
         const actualCol = forecastCol + 1;
         const varianceCol = forecastCol + 2;
         const faCol = forecastCol + 3;
@@ -521,7 +523,8 @@ export default function MonthlyComparisonPage() {
               <tr>
                 <th rowSpan={2} style={{ minWidth: 160 }}>Brand</th>
                 <th rowSpan={2} style={{ minWidth: 160 }}>Product Group</th>
-                <th rowSpan={2} style={{ minWidth: 200 }}>SKU</th>
+                <th rowSpan={2} style={{ minWidth: 120 }}>SKU Code</th>
+                <th rowSpan={2} style={{ minWidth: 200 }}>SKU Name</th>
                 <th rowSpan={2} style={{ textAlign: 'center', minWidth: 100 }}>Channel</th>
                 <th rowSpan={2} style={{ textAlign: 'center', minWidth: 90 }}>Region</th>
                 <th rowSpan={2} style={{ textAlign: 'center', minWidth: 100 }}>Warehouse</th>
@@ -547,7 +550,9 @@ export default function MonthlyComparisonPage() {
                   <td style={{ borderBottom: '1px solid var(--color-border)' }}>{row.brand}</td>
                   {/* Product Group */}
                   <td style={{ borderBottom: '1px solid var(--color-border)' }}>{row.productGroup}</td>
-                  {/* SKU */}
+                  {/* SKU Code */}
+                  <td style={{ borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem', fontWeight: 500 }}>{row.skuCode}</td>
+                  {/* SKU Name */}
                   <td style={{ borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem', color: 'var(--color-text-primary)' }}>{row.skuName}</td>
                   {/* Channel */}
                   <td style={{ textAlign: 'center', fontSize: '0.8125rem', borderBottom: '1px solid var(--color-border)' }}>
@@ -579,7 +584,7 @@ export default function MonthlyComparisonPage() {
               ))}
               {flatRows.length === 0 && (
                 <tr>
-                <td colSpan={6 + displayMonths.length * 4} style={{ textAlign: 'center', padding: 'var(--space-8)' }}>No data available for the selected filters.</td>
+                <td colSpan={7 + displayMonths.length * 4} style={{ textAlign: 'center', padding: 'var(--space-8)' }}>No data available for the selected filters.</td>
                 </tr>
               )}
             </tbody>
