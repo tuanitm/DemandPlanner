@@ -1,12 +1,104 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Brain, ShoppingCart, Factory, Package, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Brain, ShoppingCart, Factory, Package, Loader2, AlertCircle, RefreshCw, Download } from 'lucide-react';
+import XLSX from 'xlsx-js-style';
 import { forecastApi, RecommendationsSummary, RecommendationItem } from '@/lib/api';
 import Modal from '@/components/ui/Modal';
 
 function RiskBadge({ risk }: { risk: string }) {
+  if (risk === 'Critical') return <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>Critical</span>;
+  if (risk === 'High') return <span style={{ color: 'var(--color-warning)', fontWeight: 600 }}>High</span>;
+  if (risk === 'Medium') return <span style={{ color: 'var(--color-info)', fontWeight: 600 }}>Medium</span>;
+  if (risk === 'Low') return <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>Low</span>;
   return <span>{risk}</span>;
+}
+
+function exportTableToExcel(
+  items: RecommendationItem[],
+  sheetName: string,
+  fileName: string,
+  columns: { header: string; key: keyof RecommendationItem | 'safety_stock'; width: number }[]
+) {
+  const exportRows = items.map(r => {
+    const row: Record<string, string | number | null> = {};
+    for (const col of columns) {
+      if (col.key === 'safety_stock') {
+        row[col.header] = r.safety_stock ?? 0;
+      } else {
+        row[col.header] = r[col.key] as string | number | null;
+      }
+    }
+    return row;
+  });
+
+  const ws = XLSX.utils.json_to_sheet(exportRows);
+
+  // Style header row and data rows
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  const colKeys = columns.map(c => c.header);
+  
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      if (!ws[addr]) continue;
+      
+      if (R === 0) {
+        // Header
+        ws[addr].s = {
+          font: { bold: true, color: { rgb: 'FFFFFF' } },
+          fill: { fgColor: { rgb: '1e293b' } },
+          alignment: { horizontal: 'center' },
+        };
+      } else {
+        const header = colKeys[C];
+        const val = ws[addr].v;
+        
+        // Format numeric columns (qty, stock, incoming, onhand)
+        if (typeof val === 'number') {
+          ws[addr].t = 'n';
+          ws[addr].z = '#,##0';
+        }
+        
+        // Format Risk column colors to match UI
+        if (header === 'Risk') {
+          let color = '000000';
+          let bgColor = 'FFFFFF';
+          if (val === 'Critical') {
+            color = 'ef4444'; bgColor = 'fef2f2'; // Danger
+          } else if (val === 'High') {
+            color = 'f59e0b'; bgColor = 'fffbeb'; // Warning
+          } else if (val === 'Medium') {
+            color = '3b82f6'; bgColor = 'eff6ff'; // Info
+          } else if (val === 'Low') {
+            color = '22c55e'; bgColor = 'f0fdf4'; // Success
+          }
+          
+          ws[addr].s = {
+            font: { color: { rgb: color }, bold: true },
+            fill: { fgColor: { rgb: bgColor } },
+            alignment: { horizontal: 'center' }
+          };
+        }
+      }
+    }
+  }
+
+  ws['!cols'] = columns.map(col => ({ wch: col.width }));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${fileName}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
 }
 
 export default function RecommendationsPage() {
@@ -72,6 +164,51 @@ export default function RecommendationsPage() {
   const moItems = data?.production_orders?.items ?? [];
   const rmItems = data?.rm_purchases?.items ?? [];
   const risk = data?.risk_breakdown ?? { critical: 0, high: 0, medium: 0, low: 0 };
+
+  // Export handlers
+  const handleExportPO = useCallback(() => {
+    exportTableToExcel(poItems, 'Purchase Orders', 'PO_Recommendations', [
+      { header: 'SKU', key: 'item_code', width: 14 },
+      { header: 'SKU Name', key: 'item_name', width: 30 },
+      { header: 'Warehouse', key: 'warehouse_code', width: 14 },
+      { header: 'Forecast', key: 'forecast_qty', width: 12 },
+      { header: 'Safety Stock', key: 'safety_stock', width: 12 },
+      { header: 'On-Hand', key: 'onhand', width: 12 },
+      { header: 'Incoming', key: 'incoming', width: 12 },
+      { header: 'Suggested PO', key: 'suggested_qty', width: 14 },
+      { header: 'Risk', key: 'risk', width: 10 },
+      { header: 'Notes', key: 'notes', width: 30 },
+    ]);
+  }, [poItems]);
+
+  const handleExportMO = useCallback(() => {
+    exportTableToExcel(moItems, 'Production Orders', 'MO_Recommendations', [
+      { header: 'SKU', key: 'item_code', width: 14 },
+      { header: 'SKU Name', key: 'item_name', width: 30 },
+      { header: 'Warehouse', key: 'warehouse_code', width: 14 },
+      { header: 'Forecast', key: 'forecast_qty', width: 12 },
+      { header: 'Safety Stock', key: 'safety_stock', width: 12 },
+      { header: 'On-Hand', key: 'onhand', width: 12 },
+      { header: 'Incoming', key: 'incoming', width: 12 },
+      { header: 'Suggested MO', key: 'suggested_qty', width: 14 },
+      { header: 'Risk', key: 'risk', width: 10 },
+      { header: 'Notes', key: 'notes', width: 30 },
+    ]);
+  }, [moItems]);
+
+  const handleExportRM = useCallback(() => {
+    exportTableToExcel(rmItems, 'Raw Materials', 'RM_Requirements', [
+      { header: 'RM Code', key: 'item_code', width: 14 },
+      { header: 'Item Name', key: 'item_name', width: 30 },
+      { header: 'Warehouse', key: 'warehouse_code', width: 14 },
+      { header: 'Required Qty', key: 'forecast_qty', width: 14 },
+      { header: 'On-Hand', key: 'onhand', width: 12 },
+      { header: 'Incoming', key: 'incoming', width: 12 },
+      { header: 'To Purchase', key: 'suggested_qty', width: 14 },
+      { header: 'Risk', key: 'risk', width: 10 },
+      { header: 'Source', key: 'notes', width: 30 },
+    ]);
+  }, [rmItems]);
 
   return (
     <div className="animate-in">
@@ -178,14 +315,19 @@ export default function RecommendationsPage() {
           </div>
 
           {/* Purchase Order Recommendations */}
-          {poItems.length > 0 && (
-            <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-              <div className="card-header">
-                <div className="card-title">🛒 Purchase Order Recommendations (Goods)</div>
-              </div>
-              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)', padding: '0 var(--space-4)' }}>
-                Formula: Suggested Qty = Forecast + Safety Stock - On-Hand - Incoming Supply
-              </div>
+          <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="card-title">🛒 Purchase Order Recommendations (Goods)</div>
+              {poItems.length > 0 && (
+                <button className="btn btn-secondary" onClick={handleExportPO} id="export-po-excel" style={{ fontSize: 'var(--font-size-xs)', padding: '6px 12px' }}>
+                  <Download size={14} /> Export Excel
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)', padding: '0 var(--space-4)' }}>
+              Formula: Suggested Qty = Forecast + Safety Stock - On-Hand - Incoming Supply
+            </div>
+            {poItems.length > 0 ? (
               <table className="data-table">
                 <thead>
                   <tr>
@@ -209,15 +351,25 @@ export default function RecommendationsPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
+            ) : (
+              <div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--color-text-muted)' }}>
+                <ShoppingCart size={28} style={{ marginBottom: 'var(--space-2)', opacity: 0.5, display: 'inline-block' }} />
+                <p style={{ fontSize: 'var(--font-size-sm)' }}>No purchase order recommendations for Goods-type items. Items with type &quot;Goods&quot; or &quot;Raw Material&quot; will appear here.</p>
+              </div>
+            )}
+          </div>
 
           {/* Production Order Recommendations */}
-          {moItems.length > 0 && (
-            <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-              <div className="card-header">
-                <div className="card-title">🏭 Production Order Recommendations (Finished Goods)</div>
-              </div>
+          <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="card-title">🏭 Production Order Recommendations (Finished Goods)</div>
+              {moItems.length > 0 && (
+                <button className="btn btn-secondary" onClick={handleExportMO} id="export-mo-excel" style={{ fontSize: 'var(--font-size-xs)', padding: '6px 12px' }}>
+                  <Download size={14} /> Export Excel
+                </button>
+              )}
+            </div>
+            {moItems.length > 0 ? (
               <table className="data-table">
                 <thead>
                   <tr>
@@ -241,15 +393,25 @@ export default function RecommendationsPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
+            ) : (
+              <div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--color-text-muted)' }}>
+                <Factory size={28} style={{ marginBottom: 'var(--space-2)', opacity: 0.5, display: 'inline-block' }} />
+                <p style={{ fontSize: 'var(--font-size-sm)' }}>No production order recommendations. Items with type &quot;Finished Goods&quot; will appear here.</p>
+              </div>
+            )}
+          </div>
 
           {/* Raw Material Requirements */}
-          {rmItems.length > 0 && (
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title">📦 Raw Material Purchase Requirements (BOM Explosion)</div>
-              </div>
+          <div className="card">
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="card-title">📦 Raw Material Purchase Requirements (BOM Explosion)</div>
+              {rmItems.length > 0 && (
+                <button className="btn btn-secondary" onClick={handleExportRM} id="export-rm-excel" style={{ fontSize: 'var(--font-size-xs)', padding: '6px 12px' }}>
+                  <Download size={14} /> Export Excel
+                </button>
+              )}
+            </div>
+            {rmItems.length > 0 ? (
               <table className="data-table">
                 <thead>
                   <tr>
@@ -272,8 +434,13 @@ export default function RecommendationsPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
+            ) : (
+              <div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--color-text-muted)' }}>
+                <Package size={28} style={{ marginBottom: 'var(--space-2)', opacity: 0.5, display: 'inline-block' }} />
+                <p style={{ fontSize: 'var(--font-size-sm)' }}>No raw material requirements. BOM explosion results for Finished Goods production will appear here.</p>
+              </div>
+            )}
+          </div>
         </>
       )}
 

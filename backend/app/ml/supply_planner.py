@@ -138,15 +138,19 @@ async def generate_recommendations(
 
     # 5. Get item details (type + lead time)
     items_result = await db.execute(
-        select(Item.item_code, Item.item_type, Item.lead_time_days)
+        select(Item.item_code, Item.item_type, Item.import_lead_time_days, Item.production_lead_time_days)
     )
-    item_info = {
-        r.item_code: {
+    item_info = {}
+    for r in items_result.all():
+        item_type_str = r.item_type.value if hasattr(r.item_type, 'value') else str(r.item_type)
+        if item_type_str == "Finished Goods":
+            lt_days = r.production_lead_time_days or 14
+        else:
+            lt_days = r.import_lead_time_days or 30
+        item_info[r.item_code] = {
             "type": r.item_type,
-            "lead_time_months": max(1, (r.lead_time_days or 14) / 30),
+            "lead_time_months": max(1, lt_days / 30),
         }
-        for r in items_result.all()
-    }
 
     # 6. Pre-load BOM data for recursive explosion
     bom_cache = await _load_bom_cache(db)

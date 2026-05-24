@@ -70,8 +70,8 @@ export default function Sidebar() {
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-logo">
-        <div className="logo-icon">D</div>
-        {!collapsed && <h1>DemandPlanner</h1>}
+        <div className="logo-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Brain size={20} /></div>
+        {!collapsed && <h1>AI Demand Planner</h1>}
       </div>
 
       <nav className="sidebar-nav">

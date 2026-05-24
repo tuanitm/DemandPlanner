@@ -38,5 +38,14 @@
   ],
   "exclude": [
     "node_modules"
+  ],
+  "mysqldb": [
+    {
+      "server": "192.168.30.91",
+      "port": "3306",
+      "database": "demandplanner",
+      "user": "planner",
+      "password": "planner@2026"
+    }
   ]
 }

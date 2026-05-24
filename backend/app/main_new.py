@@ -1,4 +1,4 @@
-"""
+﻿"""
 FastAPI application entry point.
 """
 from contextlib import asynccontextmanager
@@ -55,23 +55,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - allow all origins for network access
-if settings.CORS_ORIGINS == ["*"]:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-else:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Register routes
 app.include_router(auth.router)

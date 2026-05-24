@@ -1,5 +1,5 @@
 @echo off
 echo Starting DemandPlanner Backend...
-start cmd /k "cd backend && .\.venv\Scripts\activate && uvicorn app.main:app --reload --port 8000"
+start cmd /k "cd backend && .\.venv\Scripts\activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
 
 echo Backend services are starting up!

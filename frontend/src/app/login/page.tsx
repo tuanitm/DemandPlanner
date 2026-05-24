@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Brain } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const API_BASE = typeof window !== 'undefined' && (!process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL.includes('localhost')) ? `${window.location.protocol}//${window.location.hostname}:8000` : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000');
       const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -48,11 +49,12 @@ export default function LoginPage() {
             background: 'linear-gradient(135deg, var(--color-accent), #a855f7)',
             borderRadius: 'var(--radius-lg)', display: 'flex',
             alignItems: 'center', justifyContent: 'center',
-            fontSize: 'var(--font-size-2xl)', fontWeight: 800
+            fontSize: 'var(--font-size-2xl)', fontWeight: 800,
+            color: 'white'
           }}>
-            D
+            <Brain size={32} />
           </div>
-          <h2>DemandPlanner</h2>
+          <h2>AI Demand Planner</h2>
           <p className="subtitle">AI-Powered Demand Forecasting System</p>
         </div>
 
