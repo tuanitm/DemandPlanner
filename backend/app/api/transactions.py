@@ -33,12 +33,18 @@ router = APIRouter(prefix="/api/transactions", tags=["Transactions"])
 @router.get("/sales", response_model=PaginatedResponse)
 async def list_sales(
     page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200),
-    item_code: Optional[str] = None, warehouse_code: Optional[str] = None,
-    year: Optional[int] = None, month: Optional[int] = None,
+    item_code: Optional[str] = None,
+    warehouse_code: Optional[List[str]] = Query(None),
+    year: Optional[int] = None,
+    month: Optional[List[int]] = Query(None),
     search: Optional[str] = None,
+    brand: Optional[List[str]] = Query(None),
+    item_group: Optional[List[str]] = Query(None),
+    channel: Optional[List[str]] = Query(None),
+    region: Optional[List[str]] = Query(None),
     db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user),
 ):
-    from app.models.master_data import Item, ProductHierarchy, Partner, PartnerGroup
+    from app.models.master_data import Item, ProductHierarchy, Partner, PartnerGroup, Warehouse
 
     q = (
         select(
@@ -49,17 +55,23 @@ async def list_sales(
             ProductHierarchy.item_group_name,
             Partner.partner_name,
             PartnerGroup.channel,
+            Warehouse.warehouse_region,
         )
         .outerjoin(Item, ActualSales.item_code == Item.item_code)
         .outerjoin(ProductHierarchy, Item.item_group_code == ProductHierarchy.item_group_code)
         .outerjoin(Partner, ActualSales.partner_code == Partner.partner_code)
         .outerjoin(PartnerGroup, Partner.partner_grp_code == PartnerGroup.partner_grp_code)
+        .outerjoin(Warehouse, ActualSales.warehouse_code == Warehouse.warehouse_code)
     )
     if item_code: q = q.where(ActualSales.item_code == item_code)
-    if warehouse_code: q = q.where(ActualSales.warehouse_code == warehouse_code)
+    if warehouse_code: q = q.where(ActualSales.warehouse_code.in_(warehouse_code))
     if year: q = q.where(ActualSales.year == year)
-    if month: q = q.where(ActualSales.month == month)
+    if month: q = q.where(ActualSales.month.in_(month))
     if search: q = q.where(ActualSales.item_code.contains(search) | Item.item_name.contains(search))
+    if brand: q = q.where(ProductHierarchy.brand.in_(brand))
+    if item_group: q = q.where(ProductHierarchy.item_group_name.in_(item_group))
+    if channel: q = q.where(PartnerGroup.channel.in_(channel))
+    if region: q = q.where(Warehouse.warehouse_region.in_(region))
     q = q.order_by(ActualSales.year.desc(), ActualSales.month.desc(), ActualSales.id.desc())
 
     count_q = select(func.count()).select_from(q.subquery())
@@ -76,7 +88,8 @@ async def list_sales(
         d["brand"] = row.brand or ""
         d["item_group_name"] = row.item_group_name or ""
         d["partner_name"] = row.partner_name or ""
-        d["channel"] = str(row.channel.value) if row.channel else ""
+        d["channel"] = row.channel if row.channel else ""
+        d["region"] = row.warehouse_region or ""
         items.append(d)
 
     return PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
@@ -155,14 +168,29 @@ async def list_purchase_orders(
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user),
 ):
-    q = select(PurchaseOrder)
+    from app.models.master_data import Item
+
+    q = (
+        select(PurchaseOrder, Item.item_name)
+        .outerjoin(Item, PurchaseOrder.item_code == Item.item_code)
+    )
     if item_code: q = q.where(PurchaseOrder.item_code == item_code)
     if status: q = q.where(PurchaseOrder.status == status)
-    if search: q = q.where(PurchaseOrder.po_number.contains(search) | PurchaseOrder.item_code.contains(search))
+    if search: q = q.where(PurchaseOrder.po_number.contains(search) | PurchaseOrder.item_code.contains(search) | Item.item_name.contains(search))
     q = q.order_by(PurchaseOrder.created_at.desc())
+    
     total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar()
     result = await db.execute(q.offset((page-1)*page_size).limit(page_size))
-    return PaginatedResponse(items=[PurchaseOrderResponse.model_validate(r) for r in result.scalars().all()], total=total, page=page, page_size=page_size)
+    rows = result.all()
+
+    items = []
+    for row in rows:
+        po = row[0]
+        d = PurchaseOrderResponse.model_validate(po).model_dump()
+        d["product_name"] = row.item_name or ""
+        items.append(d)
+
+    return PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
 
 @router.post("/purchase-orders", response_model=PurchaseOrderResponse, status_code=201)
 async def create_purchase_order(data: PurchaseOrderCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -288,6 +316,16 @@ async def list_adhoc_demand(
 @router.post("/adhoc-demand", response_model=DemandAdhocResponse, status_code=201)
 async def create_adhoc_demand(data: DemandAdhocCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     obj = DemandAdhoc(**data.model_dump()); db.add(obj); await db.flush(); await db.refresh(obj)
+    return DemandAdhocResponse.model_validate(obj)
+
+@router.put("/adhoc-demand/{id}", response_model=DemandAdhocResponse)
+async def update_adhoc_demand(id: int, data: DemandAdhocCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(DemandAdhoc).where(DemandAdhoc.id == id))
+    obj = result.scalars().first()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    await db.flush(); await db.refresh(obj)
     return DemandAdhocResponse.model_validate(obj)
 
 @router.delete("/adhoc-demand/{id}")

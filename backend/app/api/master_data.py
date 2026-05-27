@@ -8,7 +8,7 @@ from sqlalchemy import select, func
 from app.database import get_db
 from app.models.master_data import (
     PartnerGroup, Partner, ProductHierarchy, Item,
-    BillOfMaterial, Warehouse, ExchangeRate
+    BillOfMaterial, Warehouse, ExchangeRate, Channel, Region, Brand
 )
 from app.models.transactions import (
     ActualSales, InventoryOnhand, PurchaseOrder, ProductionOrder,
@@ -22,6 +22,9 @@ from app.schemas.schemas import (
     ItemCreate, ItemUpdate, ItemResponse,
     BOMCreate, BOMResponse,
     WarehouseCreate, WarehouseUpdate, WarehouseResponse,
+    ChannelCreate, ChannelUpdate, ChannelResponse,
+    RegionCreate, RegionUpdate, RegionResponse,
+    BrandCreate, BrandUpdate, BrandResponse,
     ExchangeRateCreate, ExchangeRateResponse,
     PaginatedResponse, MessageResponse
 )
@@ -112,8 +115,9 @@ async def delete_partner(code: str, db: AsyncSession = Depends(get_db), current_
     # Data Integrity Check
     sales_count = (await db.execute(select(func.count()).select_from(ActualSales).where(ActualSales.partner_code == code))).scalar()
     po_count = (await db.execute(select(func.count()).select_from(PurchaseOrder).where(PurchaseOrder.partner_code == code))).scalar()
-    if sales_count > 0 or po_count > 0:
-        raise HTTPException(status_code=400, detail="Cannot delete partner because it has associated transactions.")
+    inv_count = (await db.execute(select(func.count()).select_from(InventoryOnhand).where(InventoryOnhand.partner_code == code))).scalar()
+    if sales_count > 0 or po_count > 0 or inv_count > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete partner because it has associated transactions or inventory.")
         
     await db.delete(obj)
     return MessageResponse(message="Deleted")
@@ -292,7 +296,156 @@ async def delete_warehouse(code: str, db: AsyncSession = Depends(get_db), curren
     return MessageResponse(message="Deleted")
 
 
-# ── Exchange Rates ──
+# ── Channels ──
+
+@router.get("/channels", response_model=PaginatedResponse)
+async def list_channels(
+    page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None, db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    q = select(Channel)
+    if search: q = q.where(Channel.channel_name.ilike(f"%{search}%") | Channel.channel_code.ilike(f"%{search}%"))
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar()
+    result = await db.execute(q.offset((page-1)*page_size).limit(page_size))
+    return PaginatedResponse(items=[ChannelResponse.model_validate(r) for r in result.scalars().all()], total=total, page=page, page_size=page_size)
+
+@router.post("/channels", response_model=ChannelResponse, status_code=201)
+async def create_channel(data: ChannelCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    obj = Channel(**data.model_dump()); db.add(obj); await db.flush(); await db.refresh(obj)
+    return ChannelResponse.model_validate(obj)
+
+@router.put("/channels/{channel_id}", response_model=ChannelResponse)
+async def update_channel(channel_id: int, data: ChannelUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    for k, v in data.model_dump(exclude_unset=True).items(): setattr(obj, k, v)
+    await db.flush(); await db.refresh(obj)
+    return ChannelResponse.model_validate(obj)
+
+@router.delete("/channels/{channel_id}", response_model=MessageResponse)
+async def delete_channel(channel_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    
+    # Data Integrity Check
+    count = (await db.execute(select(func.count()).select_from(PartnerGroup).where(PartnerGroup.channel == obj.channel_name))).scalar()
+    if count > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete channel because it is used by partner groups (customers/suppliers).")
+        
+    await db.delete(obj)
+    return MessageResponse(message="Deleted")
+
+
+# ── Regions ──
+
+@router.get("/regions", response_model=PaginatedResponse)
+async def list_regions(
+    page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None, db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    q = select(Region)
+    if search: q = q.where(Region.region_name.ilike(f"%{search}%") | Region.region_code.ilike(f"%{search}%"))
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar()
+    result = await db.execute(q.offset((page-1)*page_size).limit(page_size))
+    return PaginatedResponse(items=[RegionResponse.model_validate(r) for r in result.scalars().all()], total=total, page=page, page_size=page_size)
+
+@router.post("/regions", response_model=RegionResponse, status_code=201)
+async def create_region(data: RegionCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    obj = Region(**data.model_dump()); db.add(obj); await db.flush(); await db.refresh(obj)
+    return RegionResponse.model_validate(obj)
+
+@router.put("/regions/{region_id}", response_model=RegionResponse)
+async def update_region(region_id: int, data: RegionUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Region).where(Region.id == region_id))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    for k, v in data.model_dump(exclude_unset=True).items(): setattr(obj, k, v)
+    await db.flush(); await db.refresh(obj)
+    return RegionResponse.model_validate(obj)
+
+@router.delete("/regions/{region_id}", response_model=MessageResponse)
+async def delete_region(region_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Region).where(Region.id == region_id))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    
+    # Data Integrity Check
+    count = (await db.execute(select(func.count()).select_from(Warehouse).where(Warehouse.warehouse_region == obj.region_name))).scalar()
+    if count > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete region because it is used by warehouses.")
+        
+    await db.delete(obj)
+    return MessageResponse(message="Deleted")
+
+
+# ──────────────────────────────────────────────
+# Brands
+# ──────────────────────────────────────────────
+
+@router.get("/brands", response_model=PaginatedResponse)
+async def list_brands(page: int = 1, page_size: int = 50, search: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    query = select(Brand)
+    if search:
+        query = query.where(or_(
+            Brand.brand_code.ilike(f"%{search}%"),
+            Brand.brand_name.ilike(f"%{search}%")
+        ))
+    
+    total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar()
+    query = query.order_by(Brand.brand_name.asc()).offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    items = result.scalars().all()
+    
+    return PaginatedResponse(
+        items=[BrandResponse.model_validate(item) for item in items],
+        total=total, page=page, page_size=page_size
+    )
+
+@router.post("/brands", response_model=BrandResponse)
+async def create_brand(data: BrandCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    exists = (await db.execute(select(Brand).where(Brand.brand_code == data.brand_code))).scalar_one_or_none()
+    if exists: raise HTTPException(status_code=400, detail="Brand code already exists")
+    
+    new_obj = Brand(**data.model_dump())
+    db.add(new_obj)
+    await db.commit()
+    await db.refresh(new_obj)
+    return BrandResponse.model_validate(new_obj)
+
+@router.put("/brands/{brand_id}", response_model=BrandResponse)
+async def update_brand(brand_id: int, data: BrandUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Brand).where(Brand.id == brand_id))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    await db.commit()
+    await db.refresh(obj)
+    return BrandResponse.model_validate(obj)
+
+@router.delete("/brands/{brand_id}", response_model=MessageResponse)
+async def delete_brand(brand_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Brand).where(Brand.id == brand_id))
+    obj = result.scalar_one_or_none()
+    if not obj: raise HTTPException(status_code=404, detail="Not found")
+    
+    # Data Integrity Check
+    count = (await db.execute(select(func.count()).select_from(ProductHierarchy).where(ProductHierarchy.brand == obj.brand_name))).scalar()
+    if count > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete brand because it is used by product hierarchies.")
+        
+    await db.delete(obj)
+    return MessageResponse(message="Deleted")
+
+
+# ──────────────────────────────────────────────
+# Exchange Rates
+# ──────────────────────────────────────────────
 
 @router.get("/exchange-rates", response_model=List[ExchangeRateResponse])
 async def list_exchange_rates(year: Optional[int] = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

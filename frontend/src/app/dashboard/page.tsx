@@ -270,7 +270,7 @@ export default function ExecutiveDashboard() {
               <tr>
                 <th>#</th>
                 <th>SKU Code</th>
-                <th>Product Name</th>
+                <th>SKU Name</th>
                 <th>Qty Sold</th>
                 <th>Revenue (VND)</th>
               </tr>
@@ -303,7 +303,7 @@ export default function ExecutiveDashboard() {
               <tr>
                 <th>#</th>
                 <th>SKU Code</th>
-                <th>Product Name</th>
+                <th>SKU Name</th>
                 <th>On-Hand</th>
                 <th>Status</th>
               </tr>

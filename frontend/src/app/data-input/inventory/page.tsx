@@ -150,20 +150,24 @@ export default function InventoryPage() {
       const dWarehouseCode = (d.warehouse_code || '').trim().toLowerCase();
       const item = allItems.find(i => (i.item_code || '').trim().toLowerCase() === dItemCode);
       const warehouse = allWarehouses.find(w => (w.warehouse_code || '').trim().toLowerCase() === dWarehouseCode);
+      const group = allHierarchy.find(h => h.item_group_code === item?.item_group_code);
       return {
         ...d,
         item_name: item ? item.item_name : 'Unknown SKU',
+        uom: item ? item.uom : '',
+        product_group: group ? group.item_group_name : '',
         item_attribute: item?.item_attribute || null,
         warehouse_name: warehouse ? warehouse.warehouse_name : 'Unknown Warehouse'
       };
     });
-  }, [filteredInventory, page, pageSize, allItems, allWarehouses]);
+  }, [filteredInventory, page, pageSize, allItems, allWarehouses, allHierarchy]);
 
   const total = filteredInventory.length;
 
   const [form, setForm] = useState({
     item_code: '', warehouse_code: '', quantity: 0,
-    unit_cost: 0, expiry_date: '', batch_number: ''
+    unit_cost: 0, mfg_date: '', expiry_date: '',
+    batch_number: '', lot_status: 'Normal', partner_code: ''
   });
 
   const fetchAllInventory = useCallback(async () => {
@@ -189,8 +193,10 @@ export default function InventoryPage() {
     try {
       const payload = {
         ...form,
+        mfg_date: form.mfg_date || null,
         expiry_date: form.expiry_date || null,
         batch_number: form.batch_number || null,
+        partner_code: form.partner_code || null,
       };
       if (editId) {
         await transactionApi.inventory.update(editId, payload as never);
@@ -200,26 +206,29 @@ export default function InventoryPage() {
         addToast('success', 'Inventory record created');
       }
       setShowModal(false); fetchAllInventory();
-      setForm({ item_code: '', warehouse_code: '', quantity: 0, unit_cost: 0, expiry_date: '', batch_number: '' });
+      setForm({ item_code: '', warehouse_code: '', quantity: 0, unit_cost: 0, mfg_date: '', expiry_date: '', batch_number: '', lot_status: 'Normal', partner_code: '' });
     } catch (e) { addToast('error', 'Failed to save', (e as Error).message); }
     finally { setSaving(false); }
   };
 
   const openCreate = () => {
     setEditId(null);
-    setForm({ item_code: '', warehouse_code: '', quantity: 0, unit_cost: 0, expiry_date: '', batch_number: '' });
+    setForm({ item_code: '', warehouse_code: '', quantity: 0, unit_cost: 0, mfg_date: '', expiry_date: '', batch_number: '', lot_status: 'Normal', partner_code: '' });
     setShowModal(true);
   };
 
   const openEdit = (r: any) => {
     setEditId(r.id);
     setForm({
-      item_code: r.item_code,
-      warehouse_code: r.warehouse_code,
-      quantity: r.quantity,
+      item_code: r.item_code || '',
+      warehouse_code: r.warehouse_code || '',
+      quantity: r.quantity || 0,
       unit_cost: r.unit_cost || 0,
+      mfg_date: r.mfg_date || '',
       expiry_date: r.expiry_date || '',
-      batch_number: r.batch_number || ''
+      batch_number: r.batch_number || '',
+      lot_status: r.lot_status || 'Normal',
+      partner_code: r.partner_code || '',
     });
     setShowModal(true);
   };
@@ -235,19 +244,28 @@ export default function InventoryPage() {
   // Removed old filterCfg
 
   const columns: Column<any>[] = [
-    { key: 'item_code', header: 'ITEM CODE', render: r => <span>{r.item_code}</span> },
+    { key: 'warehouse_code', header: 'WAREHOUSE', render: r => r.warehouse_code },
+    { key: 'warehouse_name', header: 'WAREHOUSE NAME', render: r => r.warehouse_name },
+    { key: 'product_group', header: 'PRODUCT GROUP', render: r => r.product_group },
+    { key: 'item_code', header: 'SKU CODE', render: r => <span>{r.item_code}</span> },
+    { key: 'partner_code', header: 'PARTNER CODE', render: r => r.partner_code || '—' },
     { key: 'item_name', header: 'SKU NAME', render: r => <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{r.item_name}</span> },
-    { key: 'item_attribute', header: 'ATTRIBUTE', width: '120px', render: r => r.item_attribute || <span style={{ color: 'var(--color-text-muted)' }}>—</span> },
-    { key: 'warehouse_name', header: 'WAREHOUSE', render: r => r.warehouse_name },
-    { key: 'quantity', header: 'ON-HAND QTY', render: r => <strong>{r.quantity.toLocaleString()}</strong> },
-    { key: 'unit_cost', header: 'UNIT COST', render: r => r.unit_cost ? r.unit_cost.toLocaleString('vi-VN') : '—' },
-    { key: 'value', header: 'VALUE (VND)', render: r => (r.quantity * (r.unit_cost || 0)).toLocaleString('vi-VN') },
-    { key: 'batch_number', header: 'BATCH', render: r => r.batch_number || '—' },
-    { key: 'expiry_date', header: 'EXPIRY', render: r => {
-      if (!r.expiry_date) return '—';
-      return <span>{r.expiry_date}</span>;
+    { key: 'uom', header: 'UNIT', render: r => r.uom },
+    { key: 'batch_number', header: 'LOT NO.', render: r => r.batch_number || '—' },
+    { key: 'mfg_date', header: 'MFG. DATE', render: r => r.mfg_date ? r.mfg_date : '—' },
+    { key: 'expiry_date', header: 'EXP. DATE', render: r => r.expiry_date ? r.expiry_date : '—' },
+    { key: 'rem_shelf_life', header: 'SHELF LIFE(%)', render: r => {
+      if (!r.expiry_date || !r.mfg_date) return '—';
+      const mfg = new Date(r.mfg_date).getTime();
+      const exp = new Date(r.expiry_date).getTime();
+      const now = new Date().getTime();
+      if (exp <= mfg) return '0%';
+      const rem = ((exp - now) / (exp - mfg)) * 100;
+      return `${Math.max(0, Math.min(100, Math.round(rem)))}%`;
     }},
-    { key: 'last_updated', header: 'UPDATED', render: r => new Date(r.last_updated).toLocaleDateString() },
+    { key: 'lot_status', header: 'LOT STATUS', render: r => r.lot_status || 'Normal' },
+    { key: 'quantity', header: 'QUANTITY', render: r => <strong>{r.quantity.toLocaleString()}</strong> },
+    { key: 'amount', header: 'AMOUNT', render: r => (r.quantity * (r.unit_cost || 0)).toLocaleString('vi-VN') },
     { key: 'actions', header: '', render: r => (
       <div className="table-actions">
         <button className="table-action-btn" onClick={() => openEdit(r)} title="Edit"><Edit2 size={14} /></button>
@@ -428,10 +446,10 @@ export default function InventoryPage() {
       <DataTable columns={columns} data={displayedData} loading={loading} emptyIcon={<Box size={48} />} emptyTitle="No inventory records" emptyText="Import inventory snapshots or add records manually" />
       <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} />
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editId ? "Edit Inventory Record" : "Add Inventory Record"} size="md">
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editId ? "Edit Inventory Record" : "Add Inventory Record"} size="lg">
         <div className="form-row form-row-2">
           <div className="form-group">
-            <label className="form-label">Item Code *</label>
+            <label className="form-label">SKU Code *</label>
             <input className="form-input" value={form.item_code} onChange={e => setForm({...form, item_code: e.target.value})} placeholder="e.g. SKU-001" />
           </div>
           <div className="form-group">
@@ -439,7 +457,7 @@ export default function InventoryPage() {
             <input className="form-input" value={form.warehouse_code} onChange={e => setForm({...form, warehouse_code: e.target.value})} placeholder="e.g. WH-HCM1" />
           </div>
         </div>
-        <div className="form-row form-row-2">
+        <div className="form-row form-row-3">
           <div className="form-group">
             <label className="form-label">Quantity *</label>
             <input className="form-input" type="number" value={form.quantity} onChange={e => setForm({...form, quantity: parseFloat(e.target.value) || 0})} />
@@ -448,15 +466,34 @@ export default function InventoryPage() {
             <label className="form-label">Unit Cost (VND)</label>
             <input className="form-input" type="number" value={form.unit_cost} onChange={e => setForm({...form, unit_cost: parseFloat(e.target.value) || 0})} />
           </div>
+          <div className="form-group">
+            <label className="form-label">Partner Code</label>
+            <input className="form-input" value={form.partner_code} onChange={e => setForm({...form, partner_code: e.target.value})} placeholder="e.g. PTN-001" />
+          </div>
         </div>
         <div className="form-row form-row-2">
+          <div className="form-group">
+            <label className="form-label">Mfg. Date</label>
+            <input className="form-input" type="date" value={form.mfg_date} onChange={e => setForm({...form, mfg_date: e.target.value})} />
+          </div>
           <div className="form-group">
             <label className="form-label">Expiry Date</label>
             <input className="form-input" type="date" value={form.expiry_date} onChange={e => setForm({...form, expiry_date: e.target.value})} />
           </div>
+        </div>
+        <div className="form-row form-row-2">
           <div className="form-group">
-            <label className="form-label">Batch Number</label>
+            <label className="form-label">Lot No. (Batch Number)</label>
             <input className="form-input" value={form.batch_number} onChange={e => setForm({...form, batch_number: e.target.value})} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Lot Status</label>
+            <select className="form-input form-select" value={form.lot_status} onChange={e => setForm({...form, lot_status: e.target.value})}>
+              <option value="Normal">Normal</option>
+              <option value="Near Expired">Near Expired</option>
+              <option value="Expired">Expired</option>
+              <option value="Damaged">Damaged</option>
+            </select>
           </div>
         </div>
         <div className="modal-footer">

@@ -140,8 +140,35 @@ export interface Warehouse {
   warehouse_name: string;
   warehouse_attribute: string | null;
   warehouse_status: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Channel {
+  id: number;
+  channel_code: string;
+  channel_name: string;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Brand {
+  id: number;
+  brand_code: string;
+  brand_name: string;
+  status: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface Region {
+  id: number;
+  region_code: string;
+  region_name: string;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ExchangeRate {
@@ -248,6 +275,46 @@ export const masterDataApi = {
       api.get<PaginatedResponse<Warehouse>>(`/api/master-data/warehouses${buildQuery(params)}`),
     create: (data: Omit<Warehouse, 'id' | 'created_at' | 'updated_at'>) =>
       api.post<Warehouse>('/api/master-data/warehouses', data),
+    update: (id: number, data: Omit<Warehouse, 'id' | 'created_at' | 'updated_at'>) =>
+      api.put<Warehouse>(`/api/master-data/warehouses/${id}`, data),
+    delete: (id: number) =>
+      api.delete<MessageResponse>(`/api/master-data/warehouses/${id}`),
+  },
+
+  // Channels
+  channels: {
+    list: (params: { page?: number; page_size?: number; search?: string } = {}) =>
+      api.get<PaginatedResponse<Channel>>(`/api/master-data/channels${buildQuery(params)}`),
+    create: (data: Omit<Channel, 'id' | 'created_at' | 'updated_at'>) =>
+      api.post<Channel>('/api/master-data/channels', data),
+    update: (id: number, data: Omit<Channel, 'id' | 'created_at' | 'updated_at'>) =>
+      api.put<Channel>(`/api/master-data/channels/${id}`, data),
+    delete: (id: number) =>
+      api.delete<MessageResponse>(`/api/master-data/channels/${id}`),
+  },
+
+  // Brands
+  brands: {
+    list: (params: { page?: number; page_size?: number; search?: string } = {}) =>
+      api.get<PaginatedResponse<Brand>>(`/api/master-data/brands${buildQuery(params)}`),
+    create: (data: Omit<Brand, 'id' | 'created_at' | 'updated_at'>) =>
+      api.post<Brand>('/api/master-data/brands', data),
+    update: (id: number, data: Omit<Brand, 'id' | 'created_at' | 'updated_at'>) =>
+      api.put<Brand>(`/api/master-data/brands/${id}`, data),
+    delete: (id: number) =>
+      api.delete<MessageResponse>(`/api/master-data/brands/${id}`),
+  },
+
+  // Regions
+  regions: {
+    list: (params: { page?: number; page_size?: number; search?: string } = {}) =>
+      api.get<PaginatedResponse<Region>>(`/api/master-data/regions${buildQuery(params)}`),
+    create: (data: Omit<Region, 'id' | 'created_at' | 'updated_at'>) =>
+      api.post<Region>('/api/master-data/regions', data),
+    update: (id: number, data: Omit<Region, 'id' | 'created_at' | 'updated_at'>) =>
+      api.put<Region>(`/api/master-data/regions/${id}`, data),
+    delete: (id: number) =>
+      api.delete<MessageResponse>(`/api/master-data/regions/${id}`),
   },
 
   // Exchange Rates
@@ -282,6 +349,7 @@ export interface ActualSales {
   item_group_name?: string;
   partner_name?: string;
   channel?: string;
+  region?: string;
 }
 
 export interface InventoryOnhand {
@@ -290,8 +358,11 @@ export interface InventoryOnhand {
   warehouse_code: string;
   quantity: number;
   unit_cost: number | null;
+  mfg_date: string | null;
   expiry_date: string | null;
   batch_number: string | null;
+  lot_status: string | null;
+  partner_code: string | null;
   last_updated: string;
 }
 
@@ -299,10 +370,12 @@ export interface PurchaseOrder {
   id: number;
   po_number: string;
   item_code: string;
-  warehouse_code: string;
+  product_name?: string;
+  warehouse_code: string | null;
   partner_code: string | null;
   quantity: number;
-  received_qty: number;
+  currency: string;
+  unit_price: number;
   eta: string | null;
   status: string;
   source: string;
@@ -411,6 +484,8 @@ export const transactionApi = {
       api.get<PaginatedResponse<DemandAdhoc>>(`/api/transactions/adhoc-demand${buildQuery(params)}`),
     create: (data: Omit<DemandAdhoc, 'id' | 'created_at'>) =>
       api.post<DemandAdhoc>('/api/transactions/adhoc-demand', data),
+    update: (id: number, data: Partial<DemandAdhoc>) =>
+      api.put<DemandAdhoc>(`/api/transactions/adhoc-demand/${id}`, data),
     delete: (id: number) =>
       api.delete<MessageResponse>(`/api/transactions/adhoc-demand/${id}`),
   },

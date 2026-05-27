@@ -55,7 +55,7 @@ class PartnerGroup(Base):
     __tablename__ = "partner_groups"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    channel = Column(String(100), nullable=False)
+    channel = Column(Enum(ChannelType), nullable=False)
     partner_grp_type = Column(Enum(PartnerGroupType), nullable=False)
     partner_grp_code = Column(String(50), unique=True, nullable=False, index=True)
     partner_grp_name = Column(String(200), nullable=False)
@@ -220,51 +220,6 @@ class Warehouse(Base):
 
 
 # ──────────────────────────────────────────────
-# Channels
-# ──────────────────────────────────────────────
-
-class Channel(Base):
-    __tablename__ = "channels"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    channel_code = Column(String(50), unique=True, nullable=False, index=True)
-    channel_name = Column(String(200), nullable=False)
-    status = Column(Enum(StatusType), default=StatusType.ACTIVE, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-# ──────────────────────────────────────────────
-# Regions
-# ──────────────────────────────────────────────
-
-class Region(Base):
-    __tablename__ = "regions"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    region_code = Column(String(50), unique=True, nullable=False, index=True)
-    region_name = Column(String(200), nullable=False)
-    status = Column(Enum(StatusType), default=StatusType.ACTIVE, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-# ──────────────────────────────────────────────
-# Brands
-# ──────────────────────────────────────────────
-
-class Brand(Base):
-    __tablename__ = "brands"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    brand_code = Column(String(50), unique=True, nullable=False, index=True)
-    brand_name = Column(String(200), nullable=False)
-    status = Column(Enum(StatusType), default=StatusType.ACTIVE, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-# ──────────────────────────────────────────────
 # Exchange Rates (Monthly user input)
 # ──────────────────────────────────────────────
 
@@ -298,3 +253,5 @@ class SystemConfig(Base):
     config_value = Column(String(500), nullable=False)
     description = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# TEST COMMENT

@@ -10,7 +10,7 @@ import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
-import { masterDataApi, ProductHierarchy, Item } from '@/lib/api';
+import { masterDataApi, ProductHierarchy, Item, Brand, Partner } from '@/lib/api';
 
 const filterInputStyle: React.CSSProperties = {
   padding: '8px 12px 8px 36px',
@@ -49,6 +49,8 @@ export default function ProductsPage() {
   const [showGroupDropdown, setShowGroupDropdown] = useState(false);
 
   const [allHierarchy, setAllHierarchy] = useState<ProductHierarchy[]>([]);
+  const [activeBrands, setActiveBrands] = useState<Brand[]>([]);
+  const [activePartners, setActivePartners] = useState<Partner[]>([]);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -66,12 +68,48 @@ export default function ProductsPage() {
         console.error("Failed to fetch all hierarchy", e);
       }
     };
+    const fetchBrands = async () => {
+      try {
+        let all: Brand[] = [];
+        let p = 1;
+        while (true) {
+          const res = await masterDataApi.brands.list({ page: p, page_size: 50 });
+          all = [...all, ...res.items];
+          if (all.length >= res.total || res.items.length === 0) break;
+          p++;
+        }
+        setActiveBrands(all.filter(b => b.status === 'Active'));
+      } catch (e) {
+        console.error("Failed to fetch brands", e);
+      }
+    };
+    const fetchPartners = async () => {
+      try {
+        let all: Partner[] = [];
+        let p = 1;
+        while (true) {
+          const res = await masterDataApi.partners.list({ page: p, page_size: 50 });
+          all = [...all, ...res.items];
+          if (all.length >= res.total || res.items.length === 0) break;
+          p++;
+        }
+        // Only active partners
+        setActivePartners(all.filter(x => x.status === 'Active'));
+      } catch (e) {
+        console.error("Failed to fetch partners", e);
+      }
+    };
     fetchAll();
+    fetchBrands();
+    fetchPartners();
   }, []);
 
-  const brands = useMemo(() => {
-    return [...new Set(allHierarchy.map(h => h.brand))].filter(Boolean).sort();
-  }, [allHierarchy]);
+  const brandOptions = useMemo(() => {
+    // Collect all active brands from master data + any existing brands in hierarchy (just in case they are missing or inactive)
+    const set = new Set(activeBrands.map(b => b.brand_name));
+    allHierarchy.forEach(h => { if (h.brand) set.add(h.brand); });
+    return [...set].sort();
+  }, [allHierarchy, activeBrands]);
 
   const productGroups = useMemo(() => {
     const filtered = iFilters.brand.length > 0
@@ -270,7 +308,7 @@ export default function ProductsPage() {
     }},
     { key: 'item_code', header: 'SKU Code', width: '120px', render: (r) => <span>{r.item_code}</span> },
     { key: 'item_partner_code', header: 'Vendor Code', width: '120px', render: (r) => r.item_partner_code ? <span>{r.item_partner_code}</span> : <span style={{ color: 'var(--color-text-muted)' }}>—</span> },
-    { key: 'item_name', header: 'Product Name', render: (r) => <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{r.item_name}</span> },
+    { key: 'item_name', header: 'SKU Name', render: (r) => <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{r.item_name}</span> },
     { key: 'item_type', header: 'Type', width: '150px' },
     { key: 'item_attribute', header: 'Attribute', width: '120px', render: (r) => r.item_attribute || <span style={{ color: 'var(--color-text-muted)' }}>—</span> },
     { key: 'uom', header: 'UoM', width: '70px' },
@@ -301,7 +339,7 @@ export default function ProductsPage() {
         'Product Group': h ? h.item_group_name : r.item_group_code,
         'SKU Code': r.item_code,
         'Vendor Code': r.item_partner_code || '',
-        'Product Name': r.item_name,
+        'SKU Name': r.item_name,
         'Type': r.item_type,
         'Attribute': r.item_attribute || '',
         'UoM': r.uom,
@@ -326,7 +364,7 @@ export default function ProductsPage() {
     <div className="animate-in">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Products & SKUs</h1>
+          <h1 className="page-title">Group & Products</h1>
           <p className="page-description">Manage product hierarchy and item master data</p>
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
@@ -361,7 +399,7 @@ export default function ProductsPage() {
             </div>
             {showBrandDropdown && (
               <div style={{ position: 'absolute', top: '100%', left: 0, minWidth: '100%', zIndex: 12, background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', maxHeight: 250, overflowY: 'auto', padding: 'var(--space-2)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                {brands.map(b => (
+                {brandOptions.map(b => (
                   <label key={b} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2)', cursor: 'pointer', borderRadius: 'var(--radius-sm)' }}>
                     <input 
                       type="checkbox" 
@@ -487,7 +525,13 @@ export default function ProductsPage() {
         footer={<><button className="btn btn-secondary" onClick={() => { setShowHModal(false); setEditingH(null); }}>Cancel</button><button className="btn btn-primary" onClick={handleSaveH} disabled={saving}>{saving && <span className="loading-spinner" />}{editingH ? 'Update' : 'Create'}</button></>}>
         <div className="form-row form-row-2">
           <div className="form-group"><label className="form-label">Business *</label><input className="form-input" placeholder="e.g. FMCG" value={hForm.business} onChange={(e) => setHForm({ ...hForm, business: e.target.value })} /></div>
-          <div className="form-group"><label className="form-label">Brand *</label><input className="form-input" placeholder="e.g. Unilever" value={hForm.brand} onChange={(e) => setHForm({ ...hForm, brand: e.target.value })} /></div>
+          <div className="form-group">
+            <label className="form-label">Brand *</label>
+            <select className="form-input form-select" value={hForm.brand} onChange={(e) => setHForm({ ...hForm, brand: e.target.value })}>
+              <option value="">Select brand...</option>
+              {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
         </div>
         <div className="form-row form-row-2">
           <div className="form-group"><label className="form-label">Category Code *</label><input className="form-input" placeholder="e.g. CAT-01" value={hForm.item_category_code} onChange={(e) => setHForm({ ...hForm, item_category_code: e.target.value })} /></div>
@@ -508,9 +552,9 @@ export default function ProductsPage() {
               <option value="">Select group...</option>{allHierarchy.map(h => <option key={h.item_group_code} value={h.item_group_code}>{h.item_group_name}</option>)}
             </select>
           </div>
-          <div className="form-group"><label className="form-label">Item Code *</label><input className="form-input" placeholder="e.g. SKU-001" value={iForm.item_code} onChange={(e) => setIForm({ ...iForm, item_code: e.target.value })} disabled={!!editingI} /></div>
+          <div className="form-group"><label className="form-label">SKU Code *</label><input className="form-input" placeholder="e.g. SKU-001" value={iForm.item_code} onChange={(e) => setIForm({ ...iForm, item_code: e.target.value })} disabled={!!editingI} /></div>
         </div>
-        <div className="form-group"><label className="form-label">Item Name *</label><input className="form-input" placeholder="Product name" value={iForm.item_name} onChange={(e) => setIForm({ ...iForm, item_name: e.target.value })} /></div>
+        <div className="form-group"><label className="form-label">SKU Name *</label><input className="form-input" placeholder="Product name" value={iForm.item_name} onChange={(e) => setIForm({ ...iForm, item_name: e.target.value })} /></div>
         <div className="form-row form-row-2">
           <div className="form-group"><label className="form-label">Type *</label><select className="form-input form-select" value={iForm.item_type} onChange={(e) => setIForm({ ...iForm, item_type: e.target.value })}><option value="Goods">Goods</option><option value="Finished Goods">Finished Goods</option><option value="Semi-Finished Goods">Semi-Finished Goods</option><option value="Raw Material">Raw Material</option></select></div>
           <div className="form-group"><label className="form-label">Attribute</label><select className="form-input form-select" value={iForm.item_attribute} onChange={(e) => setIForm({ ...iForm, item_attribute: e.target.value })}><option value="">None</option><option value="Normal">Normal</option><option value="Fast-Moving">Fast-Moving</option><option value="Slow-Moving">Slow-Moving</option></select></div>
@@ -525,7 +569,13 @@ export default function ProductsPage() {
         </div>
         <div className="form-row form-row-2">
           <div className="form-group"><label className="form-label">Foreign Name</label><input className="form-input" placeholder="Optional" value={iForm.item_for_name} onChange={(e) => setIForm({ ...iForm, item_for_name: e.target.value })} /></div>
-          <div className="form-group"><label className="form-label">Partner Code</label><input className="form-input" placeholder="Optional" value={iForm.item_partner_code} onChange={(e) => setIForm({ ...iForm, item_partner_code: e.target.value })} /></div>
+          <div className="form-group">
+            <label className="form-label">Partner Code (Vendor)</label>
+            <select className="form-input form-select" value={iForm.item_partner_code} onChange={(e) => setIForm({ ...iForm, item_partner_code: e.target.value })}>
+              <option value="">Optional</option>
+              {activePartners.map(p => <option key={p.partner_code} value={p.partner_code}>{p.partner_code} - {p.partner_name}</option>)}
+            </select>
+          </div>
         </div>
       </Modal>
 

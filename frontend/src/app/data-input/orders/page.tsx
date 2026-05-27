@@ -40,7 +40,7 @@ export default function OrdersPage() {
   const [editMoId, setEditMoId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<{ id: number; type: Tab } | null>(null);
 
-  const [poForm, setPoForm] = useState({ po_number: '', item_code: '', warehouse_code: '', partner_code: '', quantity: 0, received_qty: 0, eta: '', status: 'Confirmed', source: 'Manual' });
+  const [poForm, setPoForm] = useState({ po_number: '', item_code: '', partner_code: '', quantity: 0, currency: 'VND', unit_price: 0, eta: '', status: 'Confirmed', source: 'Manual' });
   const [moForm, setMoForm] = useState({ mo_number: '', item_code: '', warehouse_code: '', quantity: 0, completed_qty: 0, planned_date: '', status: 'Confirmed', source: 'Manual' });
 
   const fetchPO = useCallback(async () => {
@@ -98,13 +98,13 @@ export default function OrdersPage() {
 
   const openCreatePO = () => {
     setEditPoId(null);
-    setPoForm({ po_number: '', item_code: '', warehouse_code: '', partner_code: '', quantity: 0, received_qty: 0, eta: '', status: 'Confirmed', source: 'Manual' });
+    setPoForm({ po_number: '', item_code: '', partner_code: '', quantity: 0, currency: 'VND', unit_price: 0, eta: '', status: 'Confirmed', source: 'Manual' });
     setShowPoModal(true);
   };
 
   const openEditPO = (r: PurchaseOrder) => {
     setEditPoId(r.id);
-    setPoForm({ po_number: r.po_number, item_code: r.item_code, warehouse_code: r.warehouse_code, partner_code: r.partner_code || '', quantity: r.quantity, received_qty: r.received_qty, eta: r.eta || '', status: r.status, source: r.source });
+    setPoForm({ po_number: r.po_number, item_code: r.item_code, partner_code: r.partner_code || '', quantity: r.quantity, currency: r.currency || 'VND', unit_price: r.unit_price, eta: r.eta || '', status: r.status, source: r.source });
     setShowPoModal(true);
   };
 
@@ -144,13 +144,15 @@ export default function OrdersPage() {
 
   const poCols: Column<PurchaseOrder>[] = [
     { key: 'po_number', header: 'PO NUMBER', render: r => <strong style={{ color: 'var(--color-accent-hover)' }}>{r.po_number}</strong> },
-    { key: 'item_code', header: 'ITEM CODE', render: r => <span>{r.item_code}</span> },
-    { key: 'warehouse_code', header: 'WAREHOUSE' },
-    { key: 'partner_code', header: 'SUPPLIER', render: r => r.partner_code || '—' },
+    { key: 'item_code', header: 'SKU CODE', render: r => <span>{r.item_code}</span> },
+    { key: 'partner_code', header: 'PARTNER CODE', render: r => r.partner_code || '—' },
+    { key: 'product_name', header: 'SKU NAME', render: r => <span>{r.product_name || '—'}</span> },
     { key: 'quantity', header: 'ORDER QTY', render: r => r.quantity.toLocaleString() },
-    { key: 'received_qty', header: 'RECEIVED', render: r => <span style={{ color: r.received_qty >= r.quantity ? 'var(--color-success)' : 'var(--color-warning)' }}>{r.received_qty.toLocaleString()}</span> },
+    { key: 'currency', header: 'Currency', render: r => r.currency || 'VND' },
+    { key: 'unit_price', header: 'UNIT PRICE', render: r => r.unit_price ? r.unit_price.toLocaleString() : '—' },
     { key: 'eta', header: 'ETA', render: r => r.eta || '—' },
     { key: 'status', header: 'STATUS', render: r => statusBadge(r.status) },
+    { key: 'source', header: 'SOURCE', render: r => r.source || '—' },
     { key: 'actions', header: '', render: r => (
       <div className="table-actions">
         <button className="table-action-btn" onClick={() => openEditPO(r)} title="Edit"><Edit2 size={14} /></button>
@@ -161,7 +163,7 @@ export default function OrdersPage() {
 
   const moCols: Column<ProductionOrder>[] = [
     { key: 'mo_number', header: 'MO NUMBER', render: r => <strong style={{ color: 'var(--color-accent-hover)' }}>{r.mo_number}</strong> },
-    { key: 'item_code', header: 'ITEM CODE', render: r => <span>{r.item_code}</span> },
+    { key: 'item_code', header: 'SKU CODE', render: r => <span>{r.item_code}</span> },
     { key: 'warehouse_code', header: 'WAREHOUSE' },
     { key: 'quantity', header: 'PLANNED QTY', render: r => r.quantity.toLocaleString() },
     { key: 'completed_qty', header: 'COMPLETED', render: r => <span style={{ color: r.completed_qty >= r.quantity ? 'var(--color-success)' : 'var(--color-warning)' }}>{r.completed_qty.toLocaleString()}</span> },
@@ -188,7 +190,7 @@ export default function OrdersPage() {
 
       {tab === 'po' && (<>
         <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end', marginBottom: 'var(--space-4)' }}>
-          <ImportExcel entityKey="purchase-orders" entityLabel="Import POs" onImportComplete={fetchPO} />
+          <ImportExcel entityKey="purchase-orders" entityLabel="Purchase Orders" onImportComplete={fetchPO} />
           <button className="btn btn-primary" onClick={openCreatePO}><Plus size={16} /> Add PO</button>
         </div>
         <FilterBar searchPlaceholder="Search PO or item..." filters={poFilterCfg} onFilterChange={(f) => { setPoFilters(f); setPoPage(1); }} />
@@ -198,7 +200,7 @@ export default function OrdersPage() {
 
       {tab === 'mo' && (<>
         <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end', marginBottom: 'var(--space-4)' }}>
-          <ImportExcel entityKey="production-orders" entityLabel="Import MOs" onImportComplete={fetchMO} />
+          <ImportExcel entityKey="production-orders" entityLabel="Production Orders" onImportComplete={fetchMO} />
           <button className="btn btn-primary" onClick={openCreateMO}><Plus size={16} /> Add MO</button>
         </div>
         <FilterBar searchPlaceholder="Search MO or item..." filters={poFilterCfg} onFilterChange={(f) => { setMoFilters(f); setMoPage(1); }} />
@@ -210,23 +212,26 @@ export default function OrdersPage() {
       <Modal isOpen={showPoModal} onClose={() => setShowPoModal(false)} title={editPoId ? "Edit Purchase Order" : "Create Purchase Order"} size="md">
         <div className="form-row form-row-2">
           <div className="form-group"><label className="form-label">PO Number *</label><input className="form-input" value={poForm.po_number} onChange={e => setPoForm({...poForm, po_number: e.target.value})} placeholder="e.g. PO-2026-001" /></div>
-          <div className="form-group"><label className="form-label">Item Code *</label><input className="form-input" value={poForm.item_code} onChange={e => setPoForm({...poForm, item_code: e.target.value})} placeholder="e.g. RM-001" /></div>
+          <div className="form-group"><label className="form-label">SKU Code *</label><input className="form-input" value={poForm.item_code} onChange={e => setPoForm({...poForm, item_code: e.target.value})} placeholder="e.g. RM-001" /></div>
         </div>
         <div className="form-row form-row-2">
-          <div className="form-group"><label className="form-label">Warehouse *</label><input className="form-input" value={poForm.warehouse_code} onChange={e => setPoForm({...poForm, warehouse_code: e.target.value})} placeholder="e.g. WH-BD1" /></div>
-          <div className="form-group"><label className="form-label">Supplier Code</label><input className="form-input" value={poForm.partner_code} onChange={e => setPoForm({...poForm, partner_code: e.target.value})} placeholder="e.g. BP-009" /></div>
+          <div className="form-group"><label className="form-label">Partner Code</label><input className="form-input" value={poForm.partner_code} onChange={e => setPoForm({...poForm, partner_code: e.target.value})} placeholder="e.g. BP-009" /></div>
+          <div className="form-group"><label className="form-label">Order Qty *</label><input className="form-input" type="number" value={poForm.quantity} onChange={e => setPoForm({...poForm, quantity: parseFloat(e.target.value) || 0})} /></div>
         </div>
         <div className="form-row form-row-3">
-          <div className="form-group"><label className="form-label">Order Qty *</label><input className="form-input" type="number" value={poForm.quantity} onChange={e => setPoForm({...poForm, quantity: parseFloat(e.target.value) || 0})} /></div>
-          <div className="form-group"><label className="form-label">Received Qty</label><input className="form-input" type="number" value={poForm.received_qty} onChange={e => setPoForm({...poForm, received_qty: parseFloat(e.target.value) || 0})} /></div>
+          <div className="form-group"><label className="form-label">Currency</label><input className="form-input" value={poForm.currency} onChange={e => setPoForm({...poForm, currency: e.target.value})} placeholder="VND" /></div>
+          <div className="form-group"><label className="form-label">Unit Price</label><input className="form-input" type="number" value={poForm.unit_price} onChange={e => setPoForm({...poForm, unit_price: parseFloat(e.target.value) || 0})} /></div>
           <div className="form-group"><label className="form-label">ETA</label><input className="form-input" type="date" value={poForm.eta} onChange={e => setPoForm({...poForm, eta: e.target.value})} /></div>
         </div>
-        <div className="form-group">
-          <label className="form-label">Status</label>
-          <select className="form-input form-select" value={poForm.status} onChange={e => setPoForm({...poForm, status: e.target.value})}>
-            <option value="Confirmed">Confirmed</option><option value="In Progress">In Progress</option>
-            <option value="Completed">Completed</option><option value="Cancelled">Cancelled</option>
-          </select>
+        <div className="form-row form-row-2">
+          <div className="form-group"><label className="form-label">Source</label><input className="form-input" value={poForm.source} onChange={e => setPoForm({...poForm, source: e.target.value})} placeholder="e.g. Manual" /></div>
+          <div className="form-group">
+            <label className="form-label">Status</label>
+            <select className="form-input form-select" value={poForm.status} onChange={e => setPoForm({...poForm, status: e.target.value})}>
+              <option value="Confirmed">Confirmed</option><option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option><option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => setShowPoModal(false)}>Cancel</button>
@@ -240,7 +245,7 @@ export default function OrdersPage() {
       <Modal isOpen={showMoModal} onClose={() => setShowMoModal(false)} title={editMoId ? "Edit Production Order" : "Create Production Order"} size="md">
         <div className="form-row form-row-2">
           <div className="form-group"><label className="form-label">MO Number *</label><input className="form-input" value={moForm.mo_number} onChange={e => setMoForm({...moForm, mo_number: e.target.value})} placeholder="e.g. MO-2026-001" /></div>
-          <div className="form-group"><label className="form-label">Item Code *</label><input className="form-input" value={moForm.item_code} onChange={e => setMoForm({...moForm, item_code: e.target.value})} placeholder="e.g. SKU-001" /></div>
+          <div className="form-group"><label className="form-label">SKU Code *</label><input className="form-input" value={moForm.item_code} onChange={e => setMoForm({...moForm, item_code: e.target.value})} placeholder="e.g. SKU-001" /></div>
         </div>
         <div className="form-row form-row-3">
           <div className="form-group"><label className="form-label">Warehouse *</label><input className="form-input" value={moForm.warehouse_code} onChange={e => setMoForm({...moForm, warehouse_code: e.target.value})} placeholder="e.g. WH-BD1" /></div>

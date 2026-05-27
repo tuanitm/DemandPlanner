@@ -13,13 +13,13 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from app.database import get_db
 from app.models.master_data import (
     PartnerGroup, Partner, ProductHierarchy, Item,
-    BillOfMaterial, Warehouse, ExchangeRate
+    BillOfMaterial, Warehouse, ExchangeRate, Channel, Region
 )
 from app.models.transactions import (
     ActualSales, InventoryOnhand, PurchaseOrder,
-    ProductionOrder, StockInTransaction, DemandAdhoc
+    ProductionOrder, DemandAdhoc
 )
-from app.models.forecasts import User
+from app.models.forecasts import ForecastResult, User
 from app.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/api/master-data/import", tags=["Master Data Import"])
@@ -75,8 +75,8 @@ TEMPLATES = {
         "sheet_name": "Items (SKUs)",
         "columns": [
             ("item_group_code", "Group Code", 16, "Must match existing group"),
-            ("item_code", "Item Code", 14, "Unique (e.g. SKU-001)"),
-            ("item_name", "Item Name", 35, "Full product name"),
+            ("item_code", "SKU Code", 14, "Unique (e.g. SKU-001)"),
+            ("item_name", "SKU Name", 35, "Full product name"),
             ("item_for_name", "Foreign Name", 25, "Optional"),
             ("item_partner_code", "Partner Code", 16, "Optional"),
             ("uom", "UoM", 8, "PCS / KG / LT / BOX"),
@@ -98,11 +98,29 @@ TEMPLATES = {
         ],
         "model": Warehouse,
     },
+    "channels": {
+        "sheet_name": "Channels",
+        "columns": [
+            ("channel_code", "Channel Code", 16, "Unique code (e.g. DOM)"),
+            ("channel_name", "Channel Name", 30, "e.g. Domestic / Export / E-Commerce"),
+            ("status", "Status", 12, "Active / Inactive"),
+        ],
+        "model": Channel,
+    },
+    "regions": {
+        "sheet_name": "Regions",
+        "columns": [
+            ("region_code", "Region Code", 16, "Unique code (e.g. SOUTH)"),
+            ("region_name", "Region Name", 30, "e.g. South / North / Central"),
+            ("status", "Status", 12, "Active / Inactive"),
+        ],
+        "model": Region,
+    },
     "bom": {
         "sheet_name": "Bill of Materials",
         "columns": [
-            ("finished_goods_item_code", "FG Item Code", 18, "Finished goods code"),
-            ("raw_material_item_code", "RM Item Code", 18, "Raw material code"),
+            ("finished_goods_item_code", "FG SKU Code", 18, "Finished goods code"),
+            ("raw_material_item_code", "RM SKU Code", 18, "Raw material code"),
             ("quantity", "Quantity", 12, "Amount per unit"),
             ("uom", "UoM", 8, "KG / LT / PCS"),
         ],
@@ -120,29 +138,75 @@ TEMPLATES = {
         "model": ExchangeRate,
     },
     # ── Transaction templates ──
+    "sales-forecast": {
+        "sheet_name": "Sales Forecast",
+        "columns": [
+            ("year", "Year", 10, "e.g. 2026"),
+            ("brand", "Brand", 18, "Brand name (informational)"),
+            ("product_group", "Product Group", 20, "Group name (informational)"),
+            ("item_code", "SKU Code", 14, "Must match existing item"),
+            ("item_name", "SKU Name", 28, "Item name (informational)"),
+            ("uom", "Unit", 8, "PCS / KG / LT / BOX"),
+            ("channel", "Channel", 16, "Domestic / Export / E-Commerce"),
+            ("region", "Region", 16, "South / North / Central"),
+            ("jan", "Jan", 10, "January quantity"),
+            ("feb", "Feb", 10, "February quantity"),
+            ("mar", "Mar", 10, "March quantity"),
+            ("apr", "Apr", 10, "April quantity"),
+            ("may", "May", 10, "May quantity"),
+            ("jun", "Jun", 10, "June quantity"),
+            ("jul", "Jul", 10, "July quantity"),
+            ("aug", "Aug", 10, "August quantity"),
+            ("sep", "Sep", 10, "September quantity"),
+            ("oct", "Oct", 10, "October quantity"),
+            ("nov", "Nov", 10, "November quantity"),
+            ("dec", "Dec", 10, "December quantity"),
+        ],
+        "model": ForecastResult,
+    },
     "actual-sales": {
         "sheet_name": "Actual Sales",
         "columns": [
-            ("item_code", "Item Code", 14, "Must match existing item"),
-            ("warehouse_code", "Warehouse Code", 16, "Must match existing warehouse"),
-            ("partner_code", "Partner Code", 16, "Optional — match existing partner"),
             ("year", "Year", 10, "e.g. 2026"),
-            ("month", "Month", 10, "1-12"),
-            ("quantity", "Quantity", 12, "Sales quantity"),
-            ("amount", "Amount (VND)", 14, "Sales amount in VND"),
-            ("source", "Source", 12, "Manual / Excel / SAP"),
+            ("brand", "Brand", 18, "Brand name (informational)"),
+            ("product_group", "Product Group", 20, "Group name (informational)"),
+            ("item_code", "SKU Code", 14, "Must match existing item"),
+            ("item_name", "SKU Name", 28, "Item name (informational)"),
+            ("uom", "Unit", 8, "PCS / KG / LT / BOX"),
+            ("channel", "Channel", 16, "Domestic / Export / E-Commerce / Modern Trade / General Trade"),
+            ("region", "Region", 16, "South / North / Central"),
+            ("jan", "Jan", 10, "January quantity"),
+            ("feb", "Feb", 10, "February quantity"),
+            ("mar", "Mar", 10, "March quantity"),
+            ("apr", "Apr", 10, "April quantity"),
+            ("may", "May", 10, "May quantity"),
+            ("jun", "Jun", 10, "June quantity"),
+            ("jul", "Jul", 10, "July quantity"),
+            ("aug", "Aug", 10, "August quantity"),
+            ("sep", "Sep", 10, "September quantity"),
+            ("oct", "Oct", 10, "October quantity"),
+            ("nov", "Nov", 10, "November quantity"),
+            ("dec", "Dec", 10, "December quantity"),
         ],
         "model": ActualSales,
     },
     "inventory": {
         "sheet_name": "Inventory On-hand",
         "columns": [
-            ("item_code", "Item Code", 14, "Must match existing item"),
-            ("warehouse_code", "Warehouse Code", 16, "Must match existing warehouse"),
+            ("warehouse_code", "Warehouse", 16, "Must match existing warehouse"),
+            ("warehouse_name", "Warehouse Name", 24, "Informational"),
+            ("product_group", "Product Group", 20, "Informational"),
+            ("item_code", "SKU Code", 14, "Must match existing item"),
+            ("partner_code", "Partner code", 16, "Optional - partner code"),
+            ("item_name", "SKU Name", 28, "Informational"),
+            ("uom", "Unit", 10, "Informational"),
+            ("batch_number", "Lot No.", 16, "Optional lot number"),
+            ("mfg_date", "Mfg. Date", 14, "YYYY-MM-DD (optional)"),
+            ("expiry_date", "Exp. Date", 14, "YYYY-MM-DD (optional)"),
+            ("rem_shelf_life", "Shelf Life(%)", 18, "Informational"),
+            ("lot_status", "Lot Status", 14, "Normal, Near Expired, Expired, Damaged"),
             ("quantity", "Quantity", 12, "On-hand quantity"),
-            ("unit_cost", "Unit Cost (VND)", 16, "Cost per unit"),
-            ("expiry_date", "Expiry Date", 14, "YYYY-MM-DD (optional)"),
-            ("batch_number", "Batch Number", 16, "Optional"),
+            ("amount", "Amount", 16, "Total value (Quantity * Unit Cost)"),
         ],
         "model": InventoryOnhand,
     },
@@ -150,11 +214,12 @@ TEMPLATES = {
         "sheet_name": "Purchase Orders",
         "columns": [
             ("po_number", "PO Number", 14, "Unique (e.g. PO-001)"),
-            ("item_code", "Item Code", 14, "Must match existing item"),
-            ("warehouse_code", "Warehouse Code", 16, "Must match existing warehouse"),
+            ("item_code", "SKU Code", 14, "Must match existing item"),
             ("partner_code", "Partner Code", 16, "Optional — supplier code"),
+            ("product_name", "SKU Name", 30, "Informational (ignored)"),
             ("quantity", "Order Qty", 12, "Ordered quantity"),
-            ("received_qty", "Received Qty", 12, "Received so far (default: 0)"),
+            ("currency", "Currency", 10, "Currency (e.g. VND, USD)"),
+            ("unit_price", "Unit Price", 12, "Price per unit"),
             ("eta", "ETA", 14, "YYYY-MM-DD"),
             ("status", "Status", 14, "Confirmed / In Progress / Completed"),
             ("source", "Source", 12, "Manual / Excel / SAP"),
@@ -165,7 +230,7 @@ TEMPLATES = {
         "sheet_name": "Production Orders",
         "columns": [
             ("mo_number", "MO Number", 14, "Unique (e.g. MO-001)"),
-            ("item_code", "Item Code", 14, "Must match existing item"),
+            ("item_code", "SKU Code", 14, "Must match existing item"),
             ("warehouse_code", "Warehouse Code", 16, "Must match existing warehouse"),
             ("quantity", "Planned Qty", 12, "Planned quantity"),
             ("completed_qty", "Completed Qty", 12, "Completed so far (default: 0)"),
@@ -175,23 +240,10 @@ TEMPLATES = {
         ],
         "model": ProductionOrder,
     },
-    "stock-in": {
-        "sheet_name": "Stock In Transactions",
-        "columns": [
-            ("trans_type", "Type", 18, "Supplier Receipt / Production Receipt / Other Receipt"),
-            ("item_code", "Item Code", 14, "Must match existing item"),
-            ("warehouse_code", "Warehouse Code", 16, "Must match existing warehouse"),
-            ("quantity", "Quantity", 12, "Received quantity"),
-            ("reference_number", "Reference #", 16, "PO or MO reference"),
-            ("trans_date", "Date", 14, "YYYY-MM-DD"),
-            ("source", "Source", 12, "Manual / Excel / SAP"),
-        ],
-        "model": StockInTransaction,
-    },
     "adhoc-demand": {
         "sheet_name": "Ad-hoc Demand",
         "columns": [
-            ("item_code", "Item Code", 14, "Must match existing item"),
+            ("item_code", "SKU Code", 14, "Must match existing item"),
             ("warehouse_code", "Warehouse Code", 16, "Must match existing warehouse"),
             ("quantity", "Quantity", 12, "Demand quantity"),
             ("demand_source", "Source", 20, "e.g. Special Order / Promotion"),
@@ -254,7 +306,7 @@ async def download_template(
     wb.save(buffer)
     buffer.seek(0)
 
-    filename = f"{entity}_template.xlsx"
+    filename = f"{entity.replace('-', '_')}_template.xlsx"
     return StreamingResponse(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -331,6 +383,51 @@ async def upload_excel(
                         data[field] = 'Excel'
                     else:
                         data[field] = val if val else None
+
+                # Remove read-only / helper columns before creating the model
+                data.pop('product_name', None)
+                data.pop('warehouse_name', None)
+                data.pop('product_group', None)
+                data.pop('item_name', None)
+                data.pop('uom', None)
+                data.pop('rem_shelf_life', None)
+                
+                amount = data.pop('amount', 0)
+                if model_cls.__name__ == 'InventoryOnhand':
+                    qty = data.get('quantity', 0)
+                    if qty > 0 and amount:
+                        data['unit_cost'] = amount / qty
+                    elif not data.get('unit_cost'):
+                        data['unit_cost'] = 0
+
+                # Pivot wide format for Sales and Forecast
+                if model_cls.__name__ in ('ActualSales', 'ForecastResult') and 'jan' in data:
+                    year = data.get('year') or 2026
+                    item_code = data.get('item_code')
+                    # Find a default warehouse if none provided in wide format
+                    # For simplicity, we just use the region as warehouse_code or a dummy if needed,
+                    # but typically warehouse_code is required. We'll set it to 'WH-HCM1' or omit if nullable.
+                    # Wait, ForecastResult REQUIRES warehouse_code! Let's default it to 'WH-HCM1' if missing.
+                    
+                    for m_idx, m_name in enumerate(['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'], start=1):
+                        qty = data.pop(m_name, 0)
+                        if qty:
+                            record_data = {
+                                'year': int(year),
+                                'month': m_idx,
+                                'item_code': item_code,
+                                'warehouse_code': 'WH-HCM1'  # Default since template doesn't specify warehouse
+                            }
+                            if model_cls.__name__ == 'ActualSales':
+                                record_data['quantity'] = float(qty)
+                            elif model_cls.__name__ == 'ForecastResult':
+                                record_data['forecast_qty'] = float(qty)
+                                record_data['model_type'] = 'Ensemble'
+                            
+                            obj = model_cls(**record_data)
+                            db.add(obj)
+                            rows_imported += 1
+                    continue
 
                 obj = model_cls(**data)
                 db.add(obj)

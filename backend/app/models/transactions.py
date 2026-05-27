@@ -46,7 +46,7 @@ class ActualSales(Base):
     warehouse_code = Column(
         String(50),
         ForeignKey("warehouses.warehouse_code", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     partner_code = Column(
@@ -90,8 +90,11 @@ class InventoryOnhand(Base):
     )
     quantity = Column(Float, nullable=False, default=0)
     unit_cost = Column(Float, nullable=True, default=0)  # VND per unit
+    mfg_date = Column(Date, nullable=True)
     expiry_date = Column(Date, nullable=True)
-    batch_number = Column(String(100), nullable=True)
+    batch_number = Column(String(100), nullable=True)  # Acts as Lot No.
+    lot_status = Column(String(50), nullable=True, default="Normal")
+    partner_code = Column(String(50), ForeignKey("partners.partner_code", ondelete="RESTRICT"), nullable=True)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
@@ -117,7 +120,7 @@ class PurchaseOrder(Base):
     warehouse_code = Column(
         String(50),
         ForeignKey("warehouses.warehouse_code", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
     )
     partner_code = Column(
         String(50),
@@ -126,6 +129,8 @@ class PurchaseOrder(Base):
     )
     quantity = Column(Float, nullable=False)
     received_qty = Column(Float, nullable=False, default=0)
+    currency = Column(String(10), nullable=True, default="VND")
+    unit_price = Column(Float, nullable=True, default=0)
     eta = Column(Date, nullable=True)
     status = Column(Enum(OrderStatus), default=OrderStatus.CONFIRMED, nullable=False)
     source = Column(String(50), default="Manual")

@@ -33,9 +33,9 @@ const navigation: NavSection[] = [
   {
     title: 'Master Data',
     items: [
-      { label: 'Products & SKUs', href: '/master-data/products', icon: <Package size={20} /> },
+      { label: 'Group & Products', href: '/master-data/products', icon: <Package size={20} /> },
       { label: 'Business Partners', href: '/master-data/partners', icon: <Users size={20} /> },
-      { label: 'Warehouses', href: '/master-data/warehouses', icon: <Warehouse size={20} /> },
+      { label: 'Others', href: '/master-data/others', icon: <Warehouse size={20} /> },
       { label: 'Bill of Materials', href: '/master-data/bom', icon: <Database size={20} /> },
       { label: 'Exchange Rates', href: '/master-data/exchange-rates', icon: <ArrowRightLeft size={20} /> },
     ],

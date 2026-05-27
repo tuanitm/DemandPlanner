@@ -199,7 +199,7 @@ export default function RecommendationsPage() {
   const handleExportRM = useCallback(() => {
     exportTableToExcel(rmItems, 'Raw Materials', 'RM_Requirements', [
       { header: 'RM Code', key: 'item_code', width: 14 },
-      { header: 'Item Name', key: 'item_name', width: 30 },
+      { header: 'SKU Name', key: 'item_name', width: 30 },
       { header: 'Warehouse', key: 'warehouse_code', width: 14 },
       { header: 'Required Qty', key: 'forecast_qty', width: 14 },
       { header: 'On-Hand', key: 'onhand', width: 12 },
@@ -415,7 +415,7 @@ export default function RecommendationsPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>RM Code</th><th>Item Name</th><th>Warehouse</th><th>Required Qty</th><th>On-Hand</th><th>Incoming</th><th>To Purchase</th><th>Risk</th><th>Source</th>
+                    <th>RM Code</th><th>SKU Name</th><th>Warehouse</th><th>Required Qty</th><th>On-Hand</th><th>Incoming</th><th>To Purchase</th><th>Risk</th><th>Source</th>
                   </tr>
                 </thead>
                 <tbody>

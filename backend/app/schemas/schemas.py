@@ -60,7 +60,7 @@ class UserRoleEnum(str, Enum):
 # ──────────────────────────────────────────────
 
 class PartnerGroupBase(BaseModel):
-    channel: ChannelTypeEnum
+    channel: str = Field(..., max_length=100)
     partner_grp_type: PartnerGroupTypeEnum
     partner_grp_code: str = Field(..., max_length=50)
     partner_grp_name: str = Field(..., max_length=200)
@@ -70,7 +70,7 @@ class PartnerGroupCreate(PartnerGroupBase):
     pass
 
 class PartnerGroupUpdate(BaseModel):
-    channel: Optional[ChannelTypeEnum] = None
+    channel: Optional[str] = Field(None, max_length=100)
     partner_grp_type: Optional[PartnerGroupTypeEnum] = None
     partner_grp_name: Optional[str] = None
     status: Optional[StatusEnum] = None
@@ -234,6 +234,78 @@ class WarehouseResponse(WarehouseBase):
 
 
 # ──────────────────────────────────────────────
+# Channel
+# ──────────────────────────────────────────────
+
+class ChannelBase(BaseModel):
+    channel_code: str = Field(..., max_length=50)
+    channel_name: str = Field(..., max_length=200)
+    status: StatusEnum = StatusEnum.ACTIVE
+
+class ChannelCreate(ChannelBase):
+    pass
+
+class ChannelUpdate(BaseModel):
+    channel_name: Optional[str] = None
+    status: Optional[StatusEnum] = None
+
+class ChannelResponse(ChannelBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+
+# ──────────────────────────────────────────────
+# Region
+# ──────────────────────────────────────────────
+
+class RegionBase(BaseModel):
+    region_code: str = Field(..., max_length=50)
+    region_name: str = Field(..., max_length=200)
+    status: StatusEnum = StatusEnum.ACTIVE
+
+class RegionCreate(RegionBase):
+    pass
+
+class RegionUpdate(BaseModel):
+    region_name: Optional[str] = None
+    status: Optional[StatusEnum] = None
+
+class RegionResponse(RegionBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+
+# ──────────────────────────────────────────────
+# Brand
+# ──────────────────────────────────────────────
+
+class BrandBase(BaseModel):
+    brand_code: str = Field(..., max_length=50)
+    brand_name: str = Field(..., max_length=200)
+    status: StatusEnum = StatusEnum.ACTIVE
+
+class BrandCreate(BrandBase):
+    pass
+
+class BrandUpdate(BaseModel):
+    brand_name: Optional[str] = Field(None, max_length=200)
+    status: Optional[StatusEnum] = None
+
+class BrandResponse(BrandBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+
+# ──────────────────────────────────────────────
 # Exchange Rate
 # ──────────────────────────────────────────────
 
@@ -260,7 +332,7 @@ class ExchangeRateResponse(ExchangeRateBase):
 
 class ActualSalesBase(BaseModel):
     item_code: str
-    warehouse_code: str
+    warehouse_code: Optional[str] = None
     partner_code: Optional[str] = None
     year: int
     month: int = Field(..., ge=1, le=12)
@@ -287,8 +359,11 @@ class InventoryBase(BaseModel):
     warehouse_code: str
     quantity: float
     unit_cost: Optional[float] = 0
+    mfg_date: Optional[date] = None
     expiry_date: Optional[date] = None
     batch_number: Optional[str] = None
+    lot_status: Optional[str] = "Normal"
+    partner_code: Optional[str] = None
 
 class InventoryCreate(InventoryBase):
     pass
@@ -307,10 +382,12 @@ class InventoryResponse(InventoryBase):
 class PurchaseOrderBase(BaseModel):
     po_number: str
     item_code: str
-    warehouse_code: str
+    warehouse_code: Optional[str] = None
     partner_code: Optional[str] = None
     quantity: float
     received_qty: float = 0
+    currency: Optional[str] = "VND"
+    unit_price: Optional[float] = 0
     eta: Optional[date] = None
     status: OrderStatusEnum = OrderStatusEnum.CONFIRMED
     source: str = "Manual"
@@ -320,6 +397,7 @@ class PurchaseOrderCreate(PurchaseOrderBase):
 
 class PurchaseOrderResponse(PurchaseOrderBase):
     id: int
+    product_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     class Config:

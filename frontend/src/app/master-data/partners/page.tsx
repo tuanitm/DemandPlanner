@@ -35,6 +35,7 @@ export default function PartnersPage() {
   const [showChannelDropdown, setShowChannelDropdown] = useState(false);
   const [showPartnerGroupDropdown, setShowPartnerGroupDropdown] = useState(false);
 
+  const [dbChannels, setDbChannels] = useState<string[]>([]);
   const [allGroups, setAllGroups] = useState<PartnerGroup[]>([]);
   useEffect(() => {
     const fetchAll = async () => {
@@ -52,7 +53,16 @@ export default function PartnersPage() {
         console.error("Failed to fetch all partner groups", e);
       }
     };
+    const fetchChannels = async () => {
+      try {
+        const res = await masterDataApi.channels.list({ page: 1, page_size: 100 });
+        setDbChannels(res.items.map(c => c.channel_name));
+      } catch (e) {
+        console.error("Failed to fetch channels", e);
+      }
+    };
     fetchAll();
+    fetchChannels();
   }, []);
 
   const channelsList = useMemo(() => {
@@ -122,7 +132,7 @@ export default function PartnersPage() {
   const [deletePartnerTarget, setDeletePartnerTarget] = useState<Partner | null>(null);
 
   const [groupForm, setGroupForm] = useState({
-    channel: 'Domestic', partner_grp_type: 'Customer',
+    channel: '', partner_grp_type: 'Customer',
     partner_grp_code: '', partner_grp_name: '', status: 'Active',
   });
   const [partnerForm, setPartnerForm] = useState({
@@ -251,7 +261,7 @@ export default function PartnersPage() {
 
   const openCreateGroup = () => {
     setEditingGroup(null);
-    setGroupForm({ channel: 'Domestic', partner_grp_type: 'Customer', partner_grp_code: '', partner_grp_name: '', status: 'Active' });
+    setGroupForm({ channel: dbChannels[0] || '', partner_grp_type: 'Customer', partner_grp_code: '', partner_grp_name: '', status: 'Active' });
     setShowGroupModal(true);
   };
 
@@ -330,8 +340,6 @@ export default function PartnersPage() {
   ];
 
   // Removed filter config since we render inline
-
-  const channels = ['Domestic', 'Export', 'E-Commerce', 'Modern Trade', 'General Trade', 'Other'];
 
   return (
     <div className="animate-in">
@@ -477,7 +485,7 @@ export default function PartnersPage() {
       <Modal isOpen={showGroupModal} onClose={() => { setShowGroupModal(false); setEditingGroup(null); }} title={editingGroup ? 'Edit Partner Group' : 'New Partner Group'} size="md"
         footer={<><button className="btn btn-secondary" onClick={() => { setShowGroupModal(false); setEditingGroup(null); }}>Cancel</button><button className="btn btn-primary" onClick={handleSaveGroup} disabled={saving}>{saving && <span className="loading-spinner" />}{editingGroup ? 'Update' : 'Create'}</button></>}>
         <div className="form-row form-row-2">
-          <div className="form-group"><label className="form-label">Channel *</label><select className="form-input form-select" value={groupForm.channel} onChange={(e) => setGroupForm({ ...groupForm, channel: e.target.value })}>{channels.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+          <div className="form-group"><label className="form-label">Channel *</label><select className="form-input form-select" value={groupForm.channel} onChange={(e) => setGroupForm({ ...groupForm, channel: e.target.value })}><option value="">Select channel...</option>{[...new Set([...dbChannels, ...(editingGroup && editingGroup.channel && !dbChannels.includes(editingGroup.channel) ? [editingGroup.channel] : [])])].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
           <div className="form-group"><label className="form-label">Type *</label><select className="form-input form-select" value={groupForm.partner_grp_type} onChange={(e) => setGroupForm({ ...groupForm, partner_grp_type: e.target.value })}><option value="Customer">Customer</option><option value="Supplier">Supplier</option></select></div>
         </div>
         <div className="form-row form-row-2">

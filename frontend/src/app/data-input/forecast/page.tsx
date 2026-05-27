@@ -34,7 +34,6 @@ interface ItemData {
 interface ForecastRow {
   id: number;
   year: number;
-  month: number;
   brand: string;
   productGroup: string;
   skuCode: string;
@@ -42,14 +41,26 @@ interface ForecastRow {
   unit: string;
   channel: string;
   region: string;
-  warehouse: string;
-  forecastQty: number;
+  jan: number;
+  feb: number;
+  mar: number;
+  apr: number;
+  may: number;
+  jun: number;
+  jul: number;
+  aug: number;
+  sep: number;
+  oct: number;
+  nov: number;
+  dec: number;
 }
 
 const currentYear = new Date().getFullYear();
-const currentMonth = new Date().getMonth() + 1;
 const MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const CHANNELS = ['Domestic', 'Export', 'E-Commerce', 'Modern Trade', 'General Trade'];
+const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'] as const;
+type MonthKey = typeof MONTH_KEYS[number];
 
 const filterInputStyle: React.CSSProperties = {
   padding: '8px 12px 8px 36px',
@@ -64,23 +75,22 @@ const filterInputStyle: React.CSSProperties = {
 
 export default function SalesForecastPage() {
   const [yearFilter, setYearFilter] = useState(currentYear);
-  const [monthFilter, setMonthFilter] = useState(currentMonth);
+  const [monthFilter, setMonthFilter] = useState<string[]>([]);
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [groupFilter, setGroupFilter] = useState<string[]>([]);
   const [channelFilter, setChannelFilter] = useState<string[]>([]);
   const [regionFilter, setRegionFilter] = useState<string[]>([]);
-  const [warehouseFilter, setWarehouseFilter] = useState<string[]>([]);
   const [searchText, setSearchText] = useState('');
 
+  const [showMonthDd, setShowMonthDd] = useState(false);
   const [showBrandDd, setShowBrandDd] = useState(false);
   const [showGroupDd, setShowGroupDd] = useState(false);
   const [showChannelDd, setShowChannelDd] = useState(false);
   const [showRegionDd, setShowRegionDd] = useState(false);
-  const [showWhDd, setShowWhDd] = useState(false);
 
   const [forecastData, setForecastData] = useState<ForecastRow[]>([]);
   const [generating, setGenerating] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingCell, setEditingCell] = useState<{ id: number; field: MonthKey } | null>(null);
   const [editValue, setEditValue] = useState('');
   const [hasUnsaved, setHasUnsaved] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -92,7 +102,7 @@ export default function SalesForecastPage() {
   const [allItems, setAllItems] = useState<ItemData[]>([]);
 
   // ── localStorage helpers ──
-  const storageKey = `forecast_${yearFilter}_${monthFilter}`;
+  const storageKey = `forecast_${yearFilter}`;
   const saveToStorage = useCallback((data: ForecastRow[]) => {
     try { localStorage.setItem(storageKey, JSON.stringify(data)); } catch {}
   }, [storageKey]);
@@ -104,7 +114,7 @@ export default function SalesForecastPage() {
     return null;
   }, [storageKey]);
 
-  // ── Load saved forecast data when year/month changes ──
+  // ── Load saved forecast data when year changes ──
   useEffect(() => {
     const saved = loadFromStorage();
     if (saved && saved.length > 0) {
@@ -113,7 +123,7 @@ export default function SalesForecastPage() {
     } else {
       setForecastData([]);
     }
-  }, [yearFilter, monthFilter, loadFromStorage]);
+  }, [yearFilter, loadFromStorage]);
 
   // ── Fetch all master data on mount ──
   useEffect(() => {
@@ -161,6 +171,9 @@ export default function SalesForecastPage() {
     [...new Set(hierarchy.map(h => h.brand))].filter(Boolean).sort(),
   [hierarchy]);
 
+  // Months
+  const monthOptions = useMemo(() => SHORT_MONTHS, []);
+
   // Product Groups: cascades from Brand
   const productGroups = useMemo(() => {
     const source = brandFilter.length > 0
@@ -174,14 +187,6 @@ export default function SalesForecastPage() {
     [...new Set(allWarehouses.map(w => w.warehouse_region))].filter(Boolean).sort(),
   [allWarehouses]);
 
-  // Warehouses: cascades from Region
-  const warehouseOptions = useMemo(() => {
-    const source = regionFilter.length > 0
-      ? allWarehouses.filter(w => regionFilter.includes(w.warehouse_region))
-      : allWarehouses;
-    return source.map(w => w.warehouse_code).sort();
-  }, [allWarehouses, regionFilter]);
-
   // Auto-reset Product Group when Brand changes
   useEffect(() => {
     if (groupFilter.length > 0) {
@@ -190,15 +195,14 @@ export default function SalesForecastPage() {
     }
   }, [productGroups, groupFilter]);
 
-  // Auto-reset Warehouse when Region changes
-  useEffect(() => {
-    if (warehouseFilter.length > 0) {
-      const valid = warehouseFilter.filter(w => warehouseOptions.includes(w));
-      if (valid.length !== warehouseFilter.length) setWarehouseFilter(valid);
-    }
-  }, [warehouseOptions, warehouseFilter]);
+  const closeAllDd = () => { setShowMonthDd(false); setShowBrandDd(false); setShowGroupDd(false); setShowChannelDd(false); setShowRegionDd(false); };
 
-  const closeAllDd = () => { setShowBrandDd(false); setShowGroupDd(false); setShowChannelDd(false); setShowRegionDd(false); setShowWhDd(false); };
+  // ── Month Columns to Display ──
+  const visibleMonthKeys = useMemo(() => {
+    if (monthFilter.length === 0) return MONTH_KEYS;
+    const selectedIndexes = monthFilter.map(m => SHORT_MONTHS.indexOf(m));
+    return MONTH_KEYS.filter((_, i) => selectedIndexes.includes(i));
+  }, [monthFilter]);
 
   // ── AI Forecast generation ──
   const handleAIForecast = useCallback(() => {
@@ -222,23 +226,40 @@ export default function SalesForecastPage() {
 
       const usedChannels = channelFilter.length > 0 ? channelFilter : ['Domestic'];
       const usedRegions = regionFilter.length > 0 ? regionFilter : (regions.length > 0 ? [regions[0]] : ['South']);
-      const usedWarehouses = warehouseFilter.length > 0 ? warehouseFilter : (warehouseOptions.length > 0 ? [warehouseOptions[0]] : ['WH-HCM1']);
 
       filteredItems.forEach(item => {
         const info = groupLookup.get(item.item_group_code);
         if (!info) return;
         usedChannels.forEach(ch => {
           usedRegions.forEach(rg => {
-            usedWarehouses.forEach(wh => {
-              const seasonality = 1 + Math.sin(monthFilter / 12 * Math.PI) * 0.15;
-              const base = 500 + ((item.item_code.charCodeAt(4) || 0) * 37 + monthFilter * 13 + yearFilter) % 2000;
-              const qty = Math.round(base * seasonality);
-              rows.push({
-                id: ++id, year: yearFilter, month: monthFilter,
-                brand: info.brand, productGroup: info.groupName,
-                skuCode: item.item_code, skuName: item.item_name, unit: item.uom || 'PCS',
-                channel: ch, region: rg, warehouse: wh, forecastQty: qty,
-              });
+            const getMonthQty = (month: number) => {
+              const seasonality = 1 + Math.sin(month / 12 * Math.PI) * 0.15;
+              const base = 500 + ((item.item_code.charCodeAt(4) || 0) * 37 + month * 13 + yearFilter) % 2000;
+              return Math.round(base * seasonality);
+            };
+            
+            rows.push({
+              id: ++id, 
+              year: yearFilter,
+              brand: info.brand, 
+              productGroup: info.groupName,
+              skuCode: item.item_code, 
+              skuName: item.item_name, 
+              unit: item.uom || 'PCS',
+              channel: ch, 
+              region: rg,
+              jan: getMonthQty(1),
+              feb: getMonthQty(2),
+              mar: getMonthQty(3),
+              apr: getMonthQty(4),
+              may: getMonthQty(5),
+              jun: getMonthQty(6),
+              jul: getMonthQty(7),
+              aug: getMonthQty(8),
+              sep: getMonthQty(9),
+              oct: getMonthQty(10),
+              nov: getMonthQty(11),
+              dec: getMonthQty(12),
             });
           });
         });
@@ -248,7 +269,7 @@ export default function SalesForecastPage() {
       setHasUnsaved(false);
       setGenerating(false);
     }, 800);
-  }, [yearFilter, monthFilter, brandFilter, groupFilter, channelFilter, regionFilter, warehouseFilter, hierarchy, allItems, regions, warehouseOptions]);
+  }, [yearFilter, brandFilter, groupFilter, channelFilter, regionFilter, hierarchy, allItems, regions, saveToStorage]);
 
   // Filter displayed data by search text
   const displayedData = useMemo(() => {
@@ -266,25 +287,31 @@ export default function SalesForecastPage() {
   const handleExport = useCallback(() => {
     if (displayedData.length === 0) return;
     const rows = displayedData.map(r => ({
-      'Year': r.year, 'Month': r.month, 'Brand': r.brand, 'Product Group': r.productGroup,
+      'Year': r.year, 'Brand': r.brand, 'Product Group': r.productGroup,
       'SKU Code': r.skuCode, 'SKU Name': r.skuName, 'Unit': r.unit,
-      'Channel': r.channel, 'Region': r.region, 'Warehouse': r.warehouse, 'Forecast Qty': r.forecastQty,
+      'Channel': r.channel, 'Region': r.region,
+      'Jan': r.jan, 'Feb': r.feb, 'Mar': r.mar, 'Apr': r.apr,
+      'May': r.may, 'Jun': r.jun, 'Jul': r.jul, 'Aug': r.aug,
+      'Sep': r.sep, 'Oct': r.oct, 'Nov': r.nov, 'Dec': r.dec,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 8 }, { wch: 8 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 28 }, { wch: 8 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 8 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 28 }, { wch: 8 }, { wch: 16 }, { wch: 16 }, 
+      { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
     const numFmt = '#,##0';
     for (let r = 1; r <= displayedData.length; r++) {
-      const ref = XLSX.utils.encode_cell({ r, c: 10 });
-      if (ws[ref]) ws[ref].s = { numFmt };
+      for (let c = 8; c <= 19; c++) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        if (ws[ref]) ws[ref].s = { numFmt };
+      }
     }
-    for (let c = 0; c <= 10; c++) {
+    for (let c = 0; c <= 19; c++) {
       const ref = XLSX.utils.encode_cell({ r: 0, c });
       if (ws[ref]) ws[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
     }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sales Forecast');
-    XLSX.writeFile(wb, `Sales_Forecast_${yearFilter}_${String(monthFilter).padStart(2, '0')}.xlsx`);
-  }, [displayedData, yearFilter, monthFilter]);
+    XLSX.writeFile(wb, `Sales_Forecast_${yearFilter}.xlsx`);
+  }, [displayedData, yearFilter]);
 
   // ── Import Excel (client-side) ──
   const handleImportExcel = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -311,16 +338,25 @@ export default function SalesForecastPage() {
           return {
             id: idx + 1,
             year: parseInt(get(['Year'])) || yearFilter,
-            month: parseInt(get(['Month'])) || monthFilter,
             brand: get(['Brand', 'BrandName']),
             productGroup: get(['ProductGroup', 'Product Group', 'ItemGroup']),
-            skuCode: get(['SKUCode', 'SKU Code', 'ItemCode', 'Item Code']),
-            skuName: get(['SKUName', 'SKU Name', 'ItemName', 'Item Name']),
+            skuCode: get(['SKUCode', 'SKU Code', 'ItemCode', 'SKU Code']),
+            skuName: get(['SKUName', 'SKU Name', 'ItemName', 'SKU Name']),
             unit: get(['Unit', 'UOM']) || 'PCS',
             channel: get(['Channel']),
             region: get(['Region']),
-            warehouse: get(['Warehouse', 'WarehouseCode', 'Warehouse Code']),
-            forecastQty: parseFloat(get(['ForecastQty', 'Forecast Qty', 'Forecast', 'Qty', 'Quantity'])) || 0,
+            jan: parseFloat(get(['Jan', 'January'])) || 0,
+            feb: parseFloat(get(['Feb', 'February'])) || 0,
+            mar: parseFloat(get(['Mar', 'March'])) || 0,
+            apr: parseFloat(get(['Apr', 'April'])) || 0,
+            may: parseFloat(get(['May'])) || 0,
+            jun: parseFloat(get(['Jun', 'June'])) || 0,
+            jul: parseFloat(get(['Jul', 'July'])) || 0,
+            aug: parseFloat(get(['Aug', 'August'])) || 0,
+            sep: parseFloat(get(['Sep', 'September'])) || 0,
+            oct: parseFloat(get(['Oct', 'October'])) || 0,
+            nov: parseFloat(get(['Nov', 'November'])) || 0,
+            dec: parseFloat(get(['Dec', 'December'])) || 0,
           };
         }).filter(r => r.skuCode); // Only include rows with a SKU Code
 
@@ -335,23 +371,24 @@ export default function SalesForecastPage() {
     // Reset input so the same file can be re-selected
     e.target.value = '';
     setShowImportModal(false);
-  }, [yearFilter, monthFilter, saveToStorage]);
+  }, [yearFilter, saveToStorage]);
 
   // ── Download Excel template ──
   const handleDownloadTemplate = useCallback(() => {
-    const templateHeaders = ['Year', 'Month', 'Brand', 'Product Group', 'SKU Code', 'SKU Name', 'Unit', 'Channel', 'Region', 'Warehouse', 'Forecast Qty'];
-    const sampleRow = [yearFilter, monthFilter, 'Brand Name', 'Group Name', 'SKU-001', 'Sample Item', 'PCS', 'Domestic', 'South', 'WH-HCM1', 1000];
+    const templateHeaders = ['Year', 'Brand', 'Product Group', 'SKU Code', 'SKU Name', 'Unit', 'Channel', 'Region', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const sampleRow = [yearFilter, 'Brand Name', 'Group Name', 'SKU-001', 'Sample Item', 'PCS', 'Domestic', 'South', 1000, 1100, 1200, 1050, 1300, 1250, 1400, 1350, 1500, 1450, 1600, 1700];
     const ws = XLSX.utils.aoa_to_sheet([templateHeaders, sampleRow]);
-    ws['!cols'] = [{ wch: 8 }, { wch: 8 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 28 }, { wch: 8 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 8 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 28 }, { wch: 8 }, { wch: 16 }, { wch: 16 }, 
+      { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
     // Style headers
-    for (let c = 0; c <= 10; c++) {
+    for (let c = 0; c <= 19; c++) {
       const ref = XLSX.utils.encode_cell({ r: 0, c });
       if (ws[ref]) ws[ref].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '6366F1' } }, alignment: { horizontal: 'center' } };
     }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sales Forecast Template');
-    XLSX.writeFile(wb, 'Sales_Forecast_Template.xlsx');
-  }, [yearFilter, monthFilter]);
+    XLSX.writeFile(wb, 'sales_forecast_template.xlsx');
+  }, [yearFilter]);
 
   // Multi-select dropdown renderer
   const renderMultiSelect = (
@@ -391,7 +428,7 @@ export default function SalesForecastPage() {
     </div>
   );
 
-  const totalQty = displayedData.reduce((s, r) => s + r.forecastQty, 0);
+  const totalQty = displayedData.reduce((s, r) => s + r.jan + r.feb + r.mar + r.apr + r.may + r.jun + r.jul + r.aug + r.sep + r.oct + r.nov + r.dec, 0);
 
   return (
     <>
@@ -407,7 +444,7 @@ export default function SalesForecastPage() {
         </div>
         <div className="kpi-card" style={{ flex: 1, '--kpi-color': '#f59e0b' } as React.CSSProperties}>
           <div className="kpi-label">Period</div>
-          <div className="kpi-value">{MONTH_NAMES[monthFilter]?.substring(0, 3)} {yearFilter}</div>
+          <div className="kpi-value">{yearFilter}</div>
         </div>
         <div className="kpi-card" style={{ flex: 1, '--kpi-color': '#a855f7' } as React.CSSProperties}>
           <div className="kpi-label">Unique SKUs</div>
@@ -506,27 +543,21 @@ export default function SalesForecastPage() {
             {[currentYear, currentYear - 1, currentYear - 2].map(y => (<option key={y} value={y}>{y}</option>))}
           </select>
         </div>
-        <div className="filter-group">
-          <label>Month</label>
-          <select className="form-input form-select" style={{ width: 140 }} value={monthFilter} onChange={e => setMonthFilter(Number(e.target.value))}>
-            {MONTH_NAMES.slice(1).map((m, i) => (<option key={i + 1} value={i + 1}>{String(i + 1).padStart(2, '0')} - {m}</option>))}
-          </select>
-        </div>
 
+        {renderMultiSelect('Months', monthOptions, monthFilter, setMonthFilter, showMonthDd, setShowMonthDd, 140)}
         {renderMultiSelect('Brands', brands, brandFilter, setBrandFilter, showBrandDd, setShowBrandDd, 160)}
         {renderMultiSelect('Groups', productGroups, groupFilter, setGroupFilter, showGroupDd, setShowGroupDd, 180)}
         {renderMultiSelect('Channels', CHANNELS, channelFilter, setChannelFilter, showChannelDd, setShowChannelDd, 160)}
         {renderMultiSelect('Regions', regions, regionFilter, setRegionFilter, showRegionDd, setShowRegionDd, 150)}
-        {renderMultiSelect('Warehouses', warehouseOptions, warehouseFilter, setWarehouseFilter, showWhDd, setShowWhDd, 160)}
 
         <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
           <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
           <input type="text" placeholder="Search items..." value={searchText} onChange={e => setSearchText(e.target.value)} style={filterInputStyle} />
         </div>
 
-        {(brandFilter.length > 0 || groupFilter.length > 0 || channelFilter.length > 0 || regionFilter.length > 0 || warehouseFilter.length > 0 || searchText) && (
+        {(monthFilter.length > 0 || brandFilter.length > 0 || groupFilter.length > 0 || channelFilter.length > 0 || regionFilter.length > 0 || searchText) && (
           <button
-            onClick={() => { setBrandFilter([]); setGroupFilter([]); setChannelFilter([]); setRegionFilter([]); setWarehouseFilter([]); setSearchText(''); }}
+            onClick={() => { setMonthFilter([]); setBrandFilter([]); setGroupFilter([]); setChannelFilter([]); setRegionFilter([]); setSearchText(''); }}
             style={{ padding: '8px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 'var(--radius-md)', color: '#ef4444', fontSize: 'var(--font-size-xs)', cursor: 'pointer', fontWeight: 500 }}
           >
             Clear Filters
@@ -540,16 +571,18 @@ export default function SalesForecastPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Year</th><th>Month</th><th>Brand</th><th>Product Group</th>
+                <th>Year</th><th>Brand</th><th>Product Group</th>
                 <th>SKU Code</th><th>SKU Name</th><th>Unit</th>
-                <th>Channel</th><th>Region</th><th>Warehouse</th>
-                <th style={{ textAlign: 'right' }}>Forecast Qty</th>
+                <th>Channel</th><th>Region</th>
+                {visibleMonthKeys.map(m => (
+                  <th key={m} style={{ textAlign: 'right', textTransform: 'capitalize' }}>{m}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {displayedData.length === 0 ? (
                 <tr>
-                  <td colSpan={11} style={{ textAlign: 'center', padding: 'var(--space-12)', color: 'var(--color-text-muted)' }}>
+                  <td colSpan={20} style={{ textAlign: 'center', padding: 'var(--space-12)', color: 'var(--color-text-muted)' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-4)' }}>
                       <Brain size={48} style={{ color: 'var(--color-accent)', opacity: 0.4 }} />
                       <div style={{ fontSize: 'var(--font-size-md)', fontWeight: 600 }}>No forecast data yet</div>
@@ -562,7 +595,6 @@ export default function SalesForecastPage() {
               ) : displayedData.map(r => (
                 <tr key={r.id}>
                   <td>{r.year}</td>
-                  <td>{String(r.month).padStart(2, '0')}</td>
                   <td style={{ fontWeight: 500 }}>{r.brand}</td>
                   <td>{r.productGroup}</td>
                   <td>{r.skuCode}</td>
@@ -570,44 +602,44 @@ export default function SalesForecastPage() {
                   <td>{r.unit}</td>
                   <td>{r.channel}</td>
                   <td>{r.region}</td>
-                  <td>{r.warehouse}</td>
-                  <td style={{ textAlign: 'right', padding: editingId === r.id ? '2px 8px' : undefined }}>
-                    {editingId === r.id ? (
-                      <input
-                        type="number"
-                        autoFocus
-                        value={editValue}
-                        onChange={e => setEditValue(e.target.value)}
-                        onBlur={() => {
-                          const v = parseFloat(editValue);
-                          if (!isNaN(v) && v >= 0) {
-                            const updated = forecastData.map(row => row.id === r.id ? { ...row, forecastQty: Math.round(v) } : row);
-                            setForecastData(updated);
-                            setHasUnsaved(true);
-                          }
-                          setEditingId(null);
-                        }}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                          if (e.key === 'Escape') setEditingId(null);
-                        }}
-                        style={{ width: 100, textAlign: 'right', padding: '4px 8px', background: 'rgba(99,102,241,0.15)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-sm)', color: 'var(--color-text-primary)', fontFamily: 'monospace', fontWeight: 600, fontSize: 'var(--font-size-sm)', outline: 'none' }}
-                        min={0}
-                        step={1}
-                      />
-                    ) : (
-                      <span
-                        onClick={() => { setEditingId(r.id); setEditValue(String(r.forecastQty)); }}
-                        style={{ cursor: 'pointer', fontWeight: 600, fontFamily: 'monospace', padding: '2px 6px', borderRadius: 'var(--radius-sm)', transition: 'background 0.15s' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(99,102,241,0.1)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        title="Click to edit"
-                      >
-                        {r.forecastQty.toLocaleString()}
-                        <Edit3 size={10} style={{ marginLeft: 6, opacity: 0.4, verticalAlign: 'middle' }} />
-                      </span>
-                    )}
-                  </td>
+                  {visibleMonthKeys.map(m => (
+                    <td key={m} style={{ textAlign: 'right', padding: editingCell?.id === r.id && editingCell?.field === m ? '2px 8px' : undefined }}>
+                      {editingCell?.id === r.id && editingCell?.field === m ? (
+                        <input
+                          type="number"
+                          autoFocus
+                          value={editValue}
+                          onChange={e => setEditValue(e.target.value)}
+                          onBlur={() => {
+                            const v = parseFloat(editValue);
+                            if (!isNaN(v) && v >= 0) {
+                              const updated = forecastData.map(row => row.id === r.id ? { ...row, [m]: Math.round(v) } : row);
+                              setForecastData(updated);
+                              setHasUnsaved(true);
+                            }
+                            setEditingCell(null);
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                            if (e.key === 'Escape') setEditingCell(null);
+                          }}
+                          style={{ width: 70, textAlign: 'right', padding: '4px 8px', background: 'rgba(99,102,241,0.15)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-sm)', color: 'var(--color-text-primary)', fontFamily: 'monospace', fontWeight: 600, fontSize: 'var(--font-size-sm)', outline: 'none' }}
+                          min={0}
+                          step={1}
+                        />
+                      ) : (
+                        <span
+                          onClick={() => { setEditingCell({ id: r.id, field: m }); setEditValue(String(r[m])); }}
+                          style={{ cursor: 'pointer', fontWeight: 600, fontFamily: 'monospace', padding: '2px 6px', borderRadius: 'var(--radius-sm)', transition: 'background 0.15s' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(99,102,241,0.1)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                          title="Click to edit"
+                        >
+                          {r[m].toLocaleString()}
+                        </span>
+                      )}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>
