@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Trash2, Megaphone, Download, Edit2 } from 'lucide-react';
+import { Plus, Trash2, Megaphone, Download, Edit2, RefreshCw, Server, FileSpreadsheet } from 'lucide-react';
 import ImportExcel from '@/components/ui/ImportExcel';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import FilterBar from '@/components/ui/FilterBar';
@@ -9,10 +9,13 @@ import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
-import { transactionApi, DemandAdhoc } from '@/lib/api';
+import { transactionApi, DemandAdhoc, sapApi } from '@/lib/api';
 
 export default function ImportPage() {
   const { addToast } = useToast();
+  const [activeTab, setActiveTab] = useState<'excel' | 'sap'>('excel');
+  const [syncing, setSyncing] = useState(false);
+  const [syncLogs, setSyncLogs] = useState<string[]>([]);
 
   // Ad-hoc state
   const [adData, setAdData] = useState<DemandAdhoc[]>([]);
@@ -108,9 +111,43 @@ export default function ImportPage() {
     } catch { addToast('error', 'Download failed'); }
   };
 
+  const handleSapSync = async () => {
+    setSyncing(true);
+    setSyncLogs(['Starting SAP B1 Synchronization...']);
+    try {
+      const res = await sapApi.syncAll();
+      setSyncLogs(prev => [...prev, `Success: ${res.message}`]);
+      addToast('success', 'SAP Sync Completed', res.message);
+    } catch (e) {
+      setSyncLogs(prev => [...prev, `Error: ${(e as Error).message}`]);
+      addToast('error', 'SAP Sync Failed', (e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <>
-      {/* Template Downloads Banner */}
+      <div className="tabs" style={{ display: 'flex', gap: 'var(--space-4)', marginBottom: 'var(--space-6)', borderBottom: '1px solid var(--color-border)' }}>
+        <button
+          className={`tab ${activeTab === 'excel' ? 'active' : ''}`}
+          onClick={() => setActiveTab('excel')}
+          style={{ padding: 'var(--space-2) var(--space-4)', background: 'none', border: 'none', borderBottom: activeTab === 'excel' ? '2px solid var(--color-accent)' : '2px solid transparent', color: activeTab === 'excel' ? 'var(--color-accent)' : 'var(--color-text-muted)', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}
+        >
+          <FileSpreadsheet size={16} /> Excel Import
+        </button>
+        <button
+          className={`tab ${activeTab === 'sap' ? 'active' : ''}`}
+          onClick={() => setActiveTab('sap')}
+          style={{ padding: 'var(--space-2) var(--space-4)', background: 'none', border: 'none', borderBottom: activeTab === 'sap' ? '2px solid var(--color-accent)' : '2px solid transparent', color: activeTab === 'sap' ? 'var(--color-accent)' : 'var(--color-text-muted)', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}
+        >
+          <Server size={16} /> SAP Integration
+        </button>
+      </div>
+
+      {activeTab === 'excel' ? (
+        <>
+          {/* Template Downloads Banner */}
       <div className="card" style={{ marginBottom: 'var(--space-6)', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.08))', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
         <div style={{ padding: 'var(--space-4)' }}>
           <h3 style={{ marginBottom: 'var(--space-3)', color: 'var(--color-accent)' }}>📥 Excel Templates</h3>
@@ -161,7 +198,40 @@ export default function ImportPage() {
         </div>
       </Modal>
 
-      <ConfirmDialog isOpen={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} title="Delete Record" message="Are you sure? This action cannot be undone." />
+          <ConfirmDialog isOpen={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} title="Delete Record" message="Are you sure? This action cannot be undone." />
+        </>
+      ) : (
+        <div className="card" style={{ maxWidth: 800, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
+            <Server size={48} style={{ color: 'var(--color-accent)', marginBottom: 'var(--space-4)' }} />
+            <h3 style={{ marginBottom: 'var(--space-2)' }}>SAP Business One Synchronization</h3>
+            <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--space-6)' }}>
+              Automatically pull Master Data, Sales, Purchase Orders, Production Orders, and Stock Onhand directly from SAP B1.
+            </p>
+            
+            <button 
+              className="btn btn-primary" 
+              onClick={handleSapSync} 
+              disabled={syncing}
+              style={{ fontSize: 'var(--font-size-md)', padding: 'var(--space-3) var(--space-6)' }}
+            >
+              <RefreshCw size={20} className={syncing ? "spin" : ""} />
+              {syncing ? 'Syncing with SAP...' : 'Sync SAP Data'}
+            </button>
+          </div>
+          
+          {syncLogs.length > 0 && (
+            <div style={{ background: 'var(--color-bg-tertiary)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)', marginTop: 'var(--space-6)', fontFamily: 'monospace', fontSize: 'var(--font-size-sm)' }}>
+              <div style={{ fontWeight: 600, marginBottom: 'var(--space-2)', color: 'var(--color-text-muted)' }}>Sync Logs:</div>
+              {syncLogs.map((log, i) => (
+                <div key={i} style={{ color: log.startsWith('Error') ? 'var(--color-danger)' : log.startsWith('Success') ? 'var(--color-success)' : 'inherit', marginBottom: 'var(--space-1)' }}>
+                  [{new Date().toLocaleTimeString()}] {log}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 }

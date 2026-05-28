@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     SAP_B1_COMPANY_DB: Optional[str] = None
     SAP_B1_USERNAME: Optional[str] = None
     SAP_B1_PASSWORD: Optional[str] = None
+    SAP_URL: Optional[str] = None
+    SAP_COMPANY_DB: Optional[str] = None
+    SAP_USERNAME: Optional[str] = None
+    SAP_PASSWORD: Optional[str] = None
 
     # CORS
     CORS_ORIGINS: list[str] = ["*"]

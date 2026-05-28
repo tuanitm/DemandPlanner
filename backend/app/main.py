@@ -12,7 +12,9 @@ from app.models.master_data import *  # noqa: F401,F403
 from app.models.transactions import *  # noqa: F401,F403
 from app.models.forecasts import *  # noqa: F401,F403
 from app.models.forecast_audit import *  # noqa: F401,F403
-from app.api import auth, master_data, transactions, import_export, forecast_api, dashboard
+from app.api import (
+    auth, master_data, transactions, import_export, sap, forecast_api, dashboard
+)
 from app.services.auth_service import hash_password
 
 
@@ -78,6 +80,7 @@ app.include_router(auth.router)
 app.include_router(master_data.router)
 app.include_router(transactions.router)
 app.include_router(import_export.router)
+app.include_router(sap.router)
 app.include_router(forecast_api.router)
 app.include_router(dashboard.router)
 

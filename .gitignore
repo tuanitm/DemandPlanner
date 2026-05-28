@@ -53,3 +53,5 @@ fix.py
 patch_backend.py
 update_attr.py
 fix_attribute.py
+.encryption_key
+encrypt_token.py

@@ -776,3 +776,11 @@ export interface WorkflowResponse {
     total_adjusted: number;
   };
 }
+
+// ──────────────────────────────────────────────
+// SAP B1 Integration API
+// ──────────────────────────────────────────────
+
+export const sapApi = {
+  syncAll: () => api.post<{ message: string; details?: any }>('/api/sap/sync-all', {}),
+};
