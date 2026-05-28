@@ -42,8 +42,8 @@ fi
 
 # Validate required env vars
 source .env
-if [[ "$POSTGRES_PASSWORD" == *"CHANGE_ME"* ]] || [[ -z "$POSTGRES_PASSWORD" ]]; then
-    echo -e "${RED}ERROR: Please set POSTGRES_PASSWORD in .env${NC}"
+if [[ "$MYSQL_PASSWORD" == *"CHANGE_ME"* ]] || [[ -z "$MYSQL_PASSWORD" ]]; then
+    echo -e "${RED}ERROR: Please set MYSQL_PASSWORD in .env${NC}"
     exit 1
 fi
 if [[ "$SECRET_KEY" == *"CHANGE_ME"* ]] || [[ -z "$SECRET_KEY" ]]; then
@@ -78,7 +78,7 @@ echo "  Waiting for services to become healthy..."
 sleep 10
 
 # Check each service
-SERVICES=("dp-postgres" "dp-redis" "dp-backend" "dp-celery" "dp-frontend" "dp-nginx")
+SERVICES=("dp-redis" "dp-backend" "dp-celery" "dp-frontend" "dp-nginx")
 ALL_OK=true
 
 for SERVICE in "${SERVICES[@]}"; do
@@ -104,7 +104,7 @@ if [ "$ALL_OK" = true ]; then
     echo "    View logs:     docker compose -f docker-compose.prod.yml logs -f"
     echo "    Stop:          docker compose -f docker-compose.prod.yml down"
     echo "    Restart:       docker compose -f docker-compose.prod.yml restart"
-    echo "    DB backup:     docker exec dp-postgres pg_dump -U dpuser demandplanner > backup.sql"
+    echo "    DB backup:     mysqldump -h 192.168.30.91 -u planner -p demandplanner > backup.sql"
 else
     echo -e "${RED}=====================================${NC}"
     echo -e "${RED} ✗ Some services failed to start     ${NC}"
