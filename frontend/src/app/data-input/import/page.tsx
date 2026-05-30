@@ -171,7 +171,7 @@ export default function ImportPage() {
 
       {/* Ad-hoc Demand Section */}
       <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end', marginBottom: 'var(--space-4)' }}>
-        <ImportExcel entityKey="adhoc-demand" entityLabel="Import Demand" onImportComplete={fetchAD} />
+        <ImportExcel entityKey="adhoc-demand" entityLabel="Ad-hoc Demand" onImportComplete={fetchAD} />
         <button className="btn btn-primary" onClick={openCreateAD}><Plus size={16} /> Add Ad-hoc</button>
       </div>
       <FilterBar searchPlaceholder="Search by item or source..." filters={[]} onFilterChange={(f) => { setAdFilters(f); setAdPage(1); }} />
