@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Database (defaults to MySQL; override with env vars if needed)
-    DATABASE_URL: str = "mysql+aiomysql://planner:planner%402026@192.168.30.90:3306/demandplanner"
-    DATABASE_URL_SYNC: str = "mysql+pymysql://planner:planner%402026@192.168.30.90:3306/demandplanner"
+    DATABASE_URL: str = "mysql+aiomysql://planner:planner%402026@192.168.30.91:3386/demandplanner"
+    DATABASE_URL_SYNC: str = "mysql+pymysql://planner:planner%402026@192.168.30.91:3386/demandplanner"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"

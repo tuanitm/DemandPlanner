@@ -38,17 +38,9 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: mysql+aiomysql://${MYSQL_USER:-planner}:${MYSQL_PASSWORD:-planner%402026}@${MYSQL_HOST:-192.168.30.91}:${MYSQL_PORT:-3386}/${MYSQL_DB:-demandplanner}
-      DATABASE_URL_SYNC: mysql+pymysql://${MYSQL_USER:-planner}:${MYSQL_PASSWORD:-planner%402026}@${MYSQL_HOST:-192.168.30.91}:${MYSQL_PORT:-3386}/${MYSQL_DB:-demandplanner}
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       ENVIRONMENT: production
       DEBUG: "false"
-      # SAP B1 Integration (optional)
-      SAP_URL: ${SAP_URL:-}
-      SAP_COMPANY_DB: ${SAP_COMPANY_DB:-}
-      SAP_USERNAME: ${SAP_USERNAME:-}
-      SAP_PASSWORD: ${SAP_PASSWORD:-}
     networks:
       - dp-internal
     depends_on:
@@ -82,10 +74,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: mysql+aiomysql://${MYSQL_USER:-planner}:${MYSQL_PASSWORD:-planner%402026}@${MYSQL_HOST:-192.168.30.91}:${MYSQL_PORT:-3386}/${MYSQL_DB:-demandplanner}
-      DATABASE_URL_SYNC: mysql+pymysql://${MYSQL_USER:-planner}:${MYSQL_PASSWORD:-planner%402026}@${MYSQL_HOST:-192.168.30.91}:${MYSQL_PORT:-3386}/${MYSQL_DB:-demandplanner}
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY}
       ENVIRONMENT: production
     networks:
       - dp-internal

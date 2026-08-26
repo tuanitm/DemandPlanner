@@ -1,0 +1,91 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dp-postgres
+    environment:
+      POSTGRES_DB: demandplanner
+      POSTGRES_USER: dpuser
+      POSTGRES_PASSWORD: dppass2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dpuser -d demandplanner"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: dp-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dp-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dpuser:dppass2024@postgres:5432/demandplanner
+      DATABASE_URL_SYNC: postgresql://dpuser:dppass2024@postgres:5432/demandplanner
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: demand-planner-secret-key-change-in-production
+      ENVIRONMENT: development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dp-celery
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dpuser:dppass2024@postgres:5432/demandplanner
+      DATABASE_URL_SYNC: postgresql://dpuser:dppass2024@postgres:5432/demandplanner
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: demand-planner-secret-key-change-in-production
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.celery_app worker --loglevel=info --pool=solo
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: dp-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    command: npm run dev
+
+volumes:
+  pg_data:
