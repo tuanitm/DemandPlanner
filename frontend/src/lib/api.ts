@@ -275,10 +275,10 @@ export const masterDataApi = {
       api.get<PaginatedResponse<Warehouse>>(`/api/master-data/warehouses${buildQuery(params)}`),
     create: (data: Omit<Warehouse, 'id' | 'created_at' | 'updated_at'>) =>
       api.post<Warehouse>('/api/master-data/warehouses', data),
-    update: (id: number, data: Omit<Warehouse, 'id' | 'created_at' | 'updated_at'>) =>
-      api.put<Warehouse>(`/api/master-data/warehouses/${id}`, data),
-    delete: (id: number) =>
-      api.delete<MessageResponse>(`/api/master-data/warehouses/${id}`),
+    update: (code: string, data: Omit<Warehouse, 'id' | 'created_at' | 'updated_at'>) =>
+      api.put<Warehouse>(`/api/master-data/warehouses/${code}`, data),
+    delete: (code: string) =>
+      api.delete<MessageResponse>(`/api/master-data/warehouses/${code}`),
   },
 
   // Channels
@@ -287,10 +287,10 @@ export const masterDataApi = {
       api.get<PaginatedResponse<Channel>>(`/api/master-data/channels${buildQuery(params)}`),
     create: (data: Omit<Channel, 'id' | 'created_at' | 'updated_at'>) =>
       api.post<Channel>('/api/master-data/channels', data),
-    update: (id: number, data: Omit<Channel, 'id' | 'created_at' | 'updated_at'>) =>
-      api.put<Channel>(`/api/master-data/channels/${id}`, data),
-    delete: (id: number) =>
-      api.delete<MessageResponse>(`/api/master-data/channels/${id}`),
+    update: (code: string, data: Omit<Channel, 'id' | 'created_at' | 'updated_at'>) =>
+      api.put<Channel>(`/api/master-data/channels/${code}`, data),
+    delete: (code: string) =>
+      api.delete<MessageResponse>(`/api/master-data/channels/${code}`),
   },
 
   // Brands
@@ -299,10 +299,10 @@ export const masterDataApi = {
       api.get<PaginatedResponse<Brand>>(`/api/master-data/brands${buildQuery(params)}`),
     create: (data: Omit<Brand, 'id' | 'created_at' | 'updated_at'>) =>
       api.post<Brand>('/api/master-data/brands', data),
-    update: (id: number, data: Omit<Brand, 'id' | 'created_at' | 'updated_at'>) =>
-      api.put<Brand>(`/api/master-data/brands/${id}`, data),
-    delete: (id: number) =>
-      api.delete<MessageResponse>(`/api/master-data/brands/${id}`),
+    update: (code: string, data: Omit<Brand, 'id' | 'created_at' | 'updated_at'>) =>
+      api.put<Brand>(`/api/master-data/brands/${code}`, data),
+    delete: (code: string) =>
+      api.delete<MessageResponse>(`/api/master-data/brands/${code}`),
   },
 
   // Regions
@@ -311,10 +311,10 @@ export const masterDataApi = {
       api.get<PaginatedResponse<Region>>(`/api/master-data/regions${buildQuery(params)}`),
     create: (data: Omit<Region, 'id' | 'created_at' | 'updated_at'>) =>
       api.post<Region>('/api/master-data/regions', data),
-    update: (id: number, data: Omit<Region, 'id' | 'created_at' | 'updated_at'>) =>
-      api.put<Region>(`/api/master-data/regions/${id}`, data),
-    delete: (id: number) =>
-      api.delete<MessageResponse>(`/api/master-data/regions/${id}`),
+    update: (code: string, data: Omit<Region, 'id' | 'created_at' | 'updated_at'>) =>
+      api.put<Region>(`/api/master-data/regions/${code}`, data),
+    delete: (code: string) =>
+      api.delete<MessageResponse>(`/api/master-data/regions/${code}`),
   },
 
   // Exchange Rates

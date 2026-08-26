@@ -1,12 +1,26 @@
 version: "3.9"
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dp-postgres
+    environment:
+      POSTGRES_DB: demandplanner
+      POSTGRES_USER: dpuser
+      POSTGRES_PASSWORD: dppass2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U dpuser -d demandplanner" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     container_name: dp-redis
-    networks:
-      - shared-network
-      - default
     ports:
       - "6379:6379"
     healthcheck:
@@ -20,13 +34,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: dp-backend
-    networks:
-      - shared-network
-      - default
     environment:
       DATABASE_URL: postgresql+asyncpg://dpuser:dppass2024@postgres:5432/demandplanner
       DATABASE_URL_SYNC: postgresql://dpuser:dppass2024@postgres:5432/demandplanner
-      REDIS_URL: redis://dp-redis:6379/0
+      REDIS_URL: redis://redis:6379/0
       SECRET_KEY: demand-planner-secret-key-change-in-production
       ENVIRONMENT: development
     ports:
@@ -45,13 +56,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: dp-celery
-    networks:
-      - shared-network
-      - default
     environment:
       DATABASE_URL: postgresql+asyncpg://dpuser:dppass2024@postgres:5432/demandplanner
       DATABASE_URL_SYNC: postgresql://dpuser:dppass2024@postgres:5432/demandplanner
-      REDIS_URL: redis://dp-redis:6379/0
+      REDIS_URL: redis://redis:6379/0
       SECRET_KEY: demand-planner-secret-key-change-in-production
     volumes:
       - ./backend:/app
@@ -67,8 +75,6 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: dp-frontend
-    networks:
-      - default
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
@@ -83,7 +89,3 @@ services:
 
 volumes:
   pg_data:
-
-networks:
-  shared-network:
-    external: true

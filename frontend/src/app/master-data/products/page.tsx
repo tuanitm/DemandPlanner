@@ -258,7 +258,13 @@ export default function ProductsPage() {
   const handleSaveI = async () => {
     setSaving(true);
     try {
-      const payload = { ...iForm, shelf_life_days: iForm.shelf_life_days === '' ? null : iForm.shelf_life_days };
+      const payload = { 
+        ...iForm, 
+        shelf_life_days: iForm.shelf_life_days === '' ? null : iForm.shelf_life_days,
+        item_attribute: iForm.item_attribute === '' ? null : iForm.item_attribute,
+        item_partner_code: iForm.item_partner_code === '' ? null : iForm.item_partner_code,
+        item_for_name: iForm.item_for_name === '' ? null : iForm.item_for_name,
+      };
       if (editingI) {
         await masterDataApi.items.update(editingI.item_code, payload as Partial<Item>);
         addToast('success', 'Item updated');
