@@ -67,7 +67,12 @@ async def dashboard_summary(
 
     # 2. Sales Plan vs Actual
     # Get plan by category
-    plan_q = select(Item.item_group_code, func.sum(ForecastResult.forecast_qty)).join(Item, ForecastResult.item_code == Item.item_code).where(ForecastResult.model_type == ModelType.ENSEMBLE)
+    plan_q = (
+        select(Item.item_group_code, func.sum(ForecastResult.forecast_qty))
+        .select_from(ForecastResult)
+        .join(Item, ForecastResult.item_code == Item.item_code)
+        .where(ForecastResult.model_type == ModelType.ENSEMBLE)
+    )
     if year: plan_q = plan_q.where(ForecastResult.year == year)
     if months_filter: plan_q = plan_q.where(ForecastResult.month.in_(months_filter))
     plan_q = plan_q.group_by(Item.item_group_code)
@@ -75,7 +80,11 @@ async def dashboard_summary(
     plan_map = {row[0]: float(row[1] or 0) for row in plan_results}
 
     # Get actual by category
-    act_q = select(Item.item_group_code, func.sum(ActualSales.quantity)).join(Item, ActualSales.item_code == Item.item_code)
+    act_q = (
+        select(Item.item_group_code, func.sum(ActualSales.quantity))
+        .select_from(ActualSales)
+        .join(Item, ActualSales.item_code == Item.item_code)
+    )
     if year: act_q = act_q.where(ActualSales.year == year)
     if months_filter: act_q = act_q.where(ActualSales.month.in_(months_filter))
     act_q = act_q.group_by(Item.item_group_code)
@@ -89,20 +98,43 @@ async def dashboard_summary(
     ]
 
     # 3. Inventory Structure
-    # Use item_attribute if available, otherwise just use a mock distribution based on random hashing or default
-    inv_struct_q = select(Item.item_attribute, func.sum(InventoryOnhand.quantity)).join(Item, InventoryOnhand.item_code == Item.item_code).group_by(Item.item_attribute)
+    # Use item_attribute if available, otherwise default to Normal
+    inv_struct_q = (
+        select(Item.item_attribute, func.sum(InventoryOnhand.quantity))
+        .select_from(InventoryOnhand)
+        .join(Item, InventoryOnhand.item_code == Item.item_code)
+        .group_by(Item.item_attribute)
+    )
     inv_struct_res = (await db.execute(inv_struct_q)).all()
     
-    structure_map = {row[0] or 'NORMAL': float(row[1] or 0) for row in inv_struct_res}
+    # item_attribute is an Enum — extract string value for reliable key lookup
+    structure_map = {}
+    for row in inv_struct_res:
+        attr = row[0]
+        # Handle both enum objects and raw strings
+        key = attr.value if hasattr(attr, 'value') else (str(attr) if attr else 'Normal')
+        structure_map[key] = structure_map.get(key, 0) + float(row[1] or 0)
+    # Default any None/missing attributes to Normal
+    if 'Normal' not in structure_map and None not in structure_map:
+        pass  # no defaulting needed
     total_stock = sum(structure_map.values()) or 1
     inventory_structure = [
-        {"name": "Normal Stock", "value": round(structure_map.get("NORMAL", 0) / total_stock * 100), "color": "#22c55e"},
-        {"name": "Slow-moving", "value": round(structure_map.get("SLOW_MOVING", 0) / total_stock * 100), "color": "#f59e0b"},
-        {"name": "Near-expiry", "value": round(structure_map.get("NEAR_EXPIRY", 0) / total_stock * 100), "color": "#ef4444"},
+        {"name": "Normal Stock", "value": round(structure_map.get("Normal", 0) / total_stock * 100), "color": "#22c55e"},
+        {"name": "Slow-moving", "value": round(structure_map.get("Slow-Moving", 0) / total_stock * 100), "color": "#f59e0b"},
+        {"name": "Fast-moving", "value": round(structure_map.get("Fast-Moving", 0) / total_stock * 100), "color": "#3b82f6"},
     ]
 
     # 4. Top 10 Best-Selling SKUs
-    top_sales_q = select(ActualSales.item_code, Item.item_name, func.sum(ActualSales.quantity).label('qty'), func.sum(ActualSales.amount).label('amt')).join(Item, ActualSales.item_code == Item.item_code)
+    top_sales_q = (
+        select(
+            ActualSales.item_code,
+            Item.item_name,
+            func.sum(ActualSales.quantity).label('qty'),
+            func.sum(ActualSales.amount).label('amt'),
+        )
+        .select_from(ActualSales)
+        .join(Item, ActualSales.item_code == Item.item_code)
+    )
     if year: top_sales_q = top_sales_q.where(ActualSales.year == year)
     if months_filter: top_sales_q = top_sales_q.where(ActualSales.month.in_(months_filter))
     top_sales_q = top_sales_q.group_by(ActualSales.item_code, Item.item_name).order_by(desc('amt')).limit(10)
@@ -112,14 +144,25 @@ async def dashboard_summary(
     ]
 
     # 5. Top 10 Highest Inventory SKUs
-    top_inv_q = select(InventoryOnhand.item_code, Item.item_name, func.sum(InventoryOnhand.quantity).label('qty'), Item.item_attribute).join(Item, InventoryOnhand.item_code == Item.item_code)
+    top_inv_q = (
+        select(
+            InventoryOnhand.item_code,
+            Item.item_name,
+            func.sum(InventoryOnhand.quantity).label('qty'),
+            Item.item_attribute,
+        )
+        .select_from(InventoryOnhand)
+        .join(Item, InventoryOnhand.item_code == Item.item_code)
+    )
     top_inv_q = top_inv_q.group_by(InventoryOnhand.item_code, Item.item_name, Item.item_attribute).order_by(desc('qty')).limit(10)
     top_inv_res = (await db.execute(top_inv_q)).all()
     
     def map_status(attr):
-        if attr == 'NORMAL': return 'success'
-        if attr == 'SLOW_MOVING': return 'warning'
-        if attr == 'NEAR_EXPIRY': return 'danger'
+        # Handle both enum objects and raw strings
+        attr_val = attr.value if hasattr(attr, 'value') else str(attr) if attr else 'Normal'
+        if attr_val == 'Normal': return 'success'
+        if attr_val == 'Slow-Moving': return 'warning'
+        if attr_val == 'Fast-Moving': return 'info'
         return 'success'
 
     top_inventory_skus = [

@@ -1,14 +1,16 @@
-version: "3.9"
-
 services:
+  # ──────────────────────────────────────────
+  # Redis — In-memory cache & Celery broker
+  # ──────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: dp-redis
-    restart: always
-    ports:
-      - "127.0.0.1:6379:6379"
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes
     volumes:
       - redis_data:/data
+    networks:
+      - dp-internal
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -17,50 +19,95 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # ──────────────────────────────────────────
+  # Backend — FastAPI application server
+  # ──────────────────────────────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
     container_name: dp-backend
-    restart: always
+    restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: mysql+aiomysql://${MYSQL_USER:-planner}:${MYSQL_PASSWORD}@${MYSQL_HOST:-192.168.30.91}:${MYSQL_PORT:-3306}/${MYSQL_DB:-demandplanner}
-      DATABASE_URL_SYNC: mysql+pymysql://${MYSQL_USER:-planner}:${MYSQL_PASSWORD}@${MYSQL_HOST:-192.168.30.91}:${MYSQL_PORT:-3306}/${MYSQL_DB:-demandplanner}
+      DATABASE_URL: mysql+aiomysql://${MYSQL_USER:-planner}:${MYSQL_PASSWORD:-planner%402026}@${MYSQL_HOST:-192.168.30.91}:${MYSQL_PORT:-3386}/${MYSQL_DB:-demandplanner}
+      DATABASE_URL_SYNC: mysql+pymysql://${MYSQL_USER:-planner}:${MYSQL_PASSWORD:-planner%402026}@${MYSQL_HOST:-192.168.30.91}:${MYSQL_PORT:-3386}/${MYSQL_DB:-demandplanner}
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       ENVIRONMENT: production
-    ports:
-      - "8000:8000"
+      DEBUG: "false"
+      # SAP B1 Integration (optional)
+      SAP_URL: ${SAP_URL:-}
+      SAP_COMPANY_DB: ${SAP_COMPANY_DB:-}
+      SAP_USERNAME: ${SAP_USERNAME:-}
+      SAP_PASSWORD: ${SAP_PASSWORD:-}
+    networks:
+      - dp-internal
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:
           memory: 2G
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
+  # ──────────────────────────────────────────
+  # Celery Worker — Async task processing
+  # ──────────────────────────────────────────
   celery-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
     container_name: dp-celery
-    restart: always
+    restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: mysql+aiomysql://${MYSQL_USER:-planner}:${MYSQL_PASSWORD}@${MYSQL_HOST:-192.168.30.91}:${MYSQL_PORT:-3306}/${MYSQL_DB:-demandplanner}
-      DATABASE_URL_SYNC: mysql+pymysql://${MYSQL_USER:-planner}:${MYSQL_PASSWORD}@${MYSQL_HOST:-192.168.30.91}:${MYSQL_PORT:-3306}/${MYSQL_DB:-demandplanner}
+      DATABASE_URL: mysql+aiomysql://${MYSQL_USER:-planner}:${MYSQL_PASSWORD:-planner%402026}@${MYSQL_HOST:-192.168.30.91}:${MYSQL_PORT:-3386}/${MYSQL_DB:-demandplanner}
+      DATABASE_URL_SYNC: mysql+pymysql://${MYSQL_USER:-planner}:${MYSQL_PASSWORD:-planner%402026}@${MYSQL_HOST:-192.168.30.91}:${MYSQL_PORT:-3386}/${MYSQL_DB:-demandplanner}
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY}
+      ENVIRONMENT: production
+    networks:
+      - dp-internal
     depends_on:
       redis:
+        condition: service_healthy
+      backend:
         condition: service_healthy
     command: celery -A app.celery_app worker --loglevel=info --pool=prefork --concurrency=2
     deploy:
       resources:
         limits:
           memory: 2G
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
+  # ──────────────────────────────────────────
+  # Frontend — Next.js production build
+  # ──────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -68,33 +115,71 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api}
     container_name: dp-frontend
-    restart: always
-    ports:
-      - "3000:3000"
+    restart: unless-stopped
+    networks:
+      - dp-internal
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     deploy:
       resources:
         limits:
           memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # ──────────────────────────────────────────
+  # Nginx — Reverse proxy & static assets
+  # ──────────────────────────────────────────
   nginx:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     container_name: dp-nginx
-    restart: always
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - dp-internal
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     deploy:
       resources:
         limits:
           memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
+# ──────────────────────────────────────────
+# Volumes
+# ──────────────────────────────────────────
 volumes:
   redis_data:
+    driver: local
+  nginx_logs:
+    driver: local
+
+# ──────────────────────────────────────────
+# Networks — Isolated internal network
+# ──────────────────────────────────────────
+networks:
+  dp-internal:
+    driver: bridge

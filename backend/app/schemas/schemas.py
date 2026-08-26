@@ -161,6 +161,7 @@ class ItemBase(BaseModel):
     status: StatusEnum = StatusEnum.ACTIVE
     import_lead_time_days: int = 30
     production_lead_time_days: int = 14
+    shelf_life_days: Optional[int] = None
 
 class ItemCreate(ItemBase):
     pass
@@ -176,6 +177,7 @@ class ItemUpdate(BaseModel):
     status: Optional[StatusEnum] = None
     import_lead_time_days: Optional[int] = None
     production_lead_time_days: Optional[int] = None
+    shelf_life_days: Optional[int] = None
 
 class ItemResponse(ItemBase):
     id: int

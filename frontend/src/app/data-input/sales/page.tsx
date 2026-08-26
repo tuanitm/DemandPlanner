@@ -334,7 +334,21 @@ export default function SalesEntryPage() {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+        // Find header row dynamically (usually row 0 for frontend export, row 2 for backend template)
+        let headerRowIndex = 0;
+        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1');
+        for (let R = range.s.r; R <= Math.min(range.e.r, 10); ++R) {
+          // Check first few columns for 'Year' or 'Brand' to identify header row
+          const cellRef1 = XLSX.utils.encode_cell({c: 0, r: R});
+          const cellRef2 = XLSX.utils.encode_cell({c: 1, r: R});
+          const val1 = ws[cellRef1]?.v ? String(ws[cellRef1].v).toLowerCase().trim() : '';
+          const val2 = ws[cellRef2]?.v ? String(ws[cellRef2].v).toLowerCase().trim() : '';
+          if (val1 === 'year' || val2 === 'brand') {
+            headerRowIndex = R;
+            break;
+          }
+        }
+        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { range: headerRowIndex });
 
         // Map columns (case-insensitive lookup)
         const rows: SalesRow[] = json.map((row, idx) => {
@@ -371,8 +385,70 @@ export default function SalesEntryPage() {
           };
         }).filter(r => r.skuCode); // Only include rows with a SKU Code
 
-        setSalesData(rows);
-        saveToStorage(rows);
+        // Data Consistency Check & Auto-correction
+        const groupLookup = new Map<string, { brand: string; groupName: string }>();
+        hierarchy.forEach(h => groupLookup.set(h.item_group_code, { brand: h.brand, groupName: h.item_group_name }));
+        const itemLookup = new Map<string, ItemData>();
+        allItems.forEach(i => itemLookup.set(i.item_code, i));
+
+        const validChannels = new Set(CHANNELS);
+        const validRegions = new Set(regions);
+
+        const invalidSKUs = new Set<string>();
+        const validRows: SalesRow[] = [];
+
+        rows.forEach(r => {
+          const item = itemLookup.get(r.skuCode);
+          if (!item) {
+            invalidSKUs.add(r.skuCode);
+            // Allow row but use provided values since master data is missing
+            validRows.push({
+              ...r,
+              channel: validChannels.has(r.channel) ? r.channel : 'Domestic',
+              region: validRegions.has(r.region) ? r.region : (regions[0] || 'South')
+            });
+            return;
+          }
+          const info = groupLookup.get(item.item_group_code);
+          validRows.push({
+            ...r,
+            brand: info?.brand || r.brand,
+            productGroup: info?.groupName || r.productGroup,
+            skuName: item.item_name || r.skuName,
+            unit: item.uom || r.unit || 'PCS',
+            channel: validChannels.has(r.channel) ? r.channel : 'Domestic',
+            region: validRegions.has(r.region) ? r.region : (regions[0] || 'South')
+          });
+        });
+
+        if (invalidSKUs.size > 0) {
+          alert(`Warning: ${invalidSKUs.size} SKU(s) were not found in Master Data (${Array.from(invalidSKUs).slice(0, 3).join(', ')}${invalidSKUs.size > 3 ? '...' : ''}). They have been imported, but please ensure they are added to Master Data. `);
+        }
+
+        // Merge with existing data
+        const mergedMap = new Map<string, SalesRow>();
+        salesData.forEach(r => {
+          const key = `${r.year}|${r.skuCode}|${r.channel}|${r.region}`;
+          mergedMap.set(key, r);
+        });
+
+        validRows.forEach(r => {
+          const key = `${r.year}|${r.skuCode}|${r.channel}|${r.region}`;
+          if (mergedMap.has(key)) {
+            // Update existing row
+            const existing = mergedMap.get(key)!;
+            mergedMap.set(key, { ...existing, ...r, id: existing.id });
+          } else {
+            // Add new row
+            mergedMap.set(key, r);
+          }
+        });
+
+        // Reassign IDs to be sequential
+        const finalRows = Array.from(mergedMap.values()).map((r, i) => ({ ...r, id: i + 1 }));
+
+        setSalesData(finalRows);
+        saveToStorage(finalRows);
         setHasUnsaved(false);
       } catch (err) {
         alert('Failed to parse Excel file. Please check the format.');
@@ -382,7 +458,7 @@ export default function SalesEntryPage() {
     // Reset input so the same file can be re-selected
     e.target.value = '';
     setShowImportModal(false);
-  }, [yearFilter, saveToStorage]);
+  }, [yearFilter, saveToStorage, salesData, allItems, hierarchy, CHANNELS, regions]);
 
   // ── Download Excel template ──
   const handleDownloadTemplate = useCallback(() => {

@@ -320,7 +320,7 @@ export default function ExecutiveDashboard() {
                     <td>{qty}</td>
                     <td>
                       <span>
-                        {status === 'success' ? 'Normal' : status === 'warning' ? 'Slow-moving' : 'Near-expiry'}
+                        {status === 'success' ? 'Normal' : status === 'warning' ? 'Slow-moving' : status === 'info' ? 'Fast-moving' : 'Normal'}
                       </span>
                     </td>
                   </tr>

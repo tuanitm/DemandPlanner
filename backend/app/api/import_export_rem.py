@@ -391,12 +391,9 @@ async def upload_excel(
                 data.pop('product_name', None)
                 data.pop('warehouse_name', None)
                 data.pop('product_group', None)
+                data.pop('item_name', None)
+                data.pop('uom', None)
                 data.pop('rem_shelf_life', None)
-
-                # item_name and uom are read-only for transactions, but required for Item master data
-                if model_cls.__name__ != 'Item':
-                    data.pop('item_name', None)
-                    data.pop('uom', None)
                 
                 amount = data.pop('amount', 0)
                 if model_cls.__name__ == 'InventoryOnhand':
