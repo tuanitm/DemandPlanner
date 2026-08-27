@@ -730,9 +730,30 @@ export interface DashboardSummaryResponse {
   topInventorySKUs: string[][];
 }
 
+export interface MonthlyComparisonRow {
+  brand: string;
+  product_group: string;
+  item_code: string;
+  item_name: string;
+  warehouse_code: string;
+  warehouse_name: string;
+  warehouse_region: string;
+  month_name: string;
+  forecast: number;
+  actual: number;
+}
+
+export interface MonthlyComparisonDashboardResponse {
+  data: MonthlyComparisonRow[];
+  brands: string[];
+  product_groups: { code: string; name: string }[];
+}
+
 export const dashboardApi = {
   summary: (params: { view_mode: string; year?: number; month?: number | number[]; quarter?: string }) =>
     api.get<DashboardSummaryResponse>(`/api/dashboard/summary${buildQuery(params)}`),
+  monthlyComparison: (params: { year?: number }) =>
+    api.get<MonthlyComparisonDashboardResponse>(`/api/dashboard/monthly-comparison${buildQuery(params)}`),
 };
 
 

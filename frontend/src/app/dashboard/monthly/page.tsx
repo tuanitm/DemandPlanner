@@ -5,81 +5,9 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import { Download, Search } from 'lucide-react';
-import * as XLSX from 'xlsx-js-style';
-import { masterDataApi } from '../../../lib/api';
-
-interface ProductHierarchy {
-  item_group_code: string;
-  item_group_name: string;
-  business: string;
-  brand: string;
-  item_category_code: string;
-  item_category_name: string;
-  status: string;
-}
-
-// Generate granular mock data from the live product hierarchy so brand/group filters match real master data
-const generateGranularData = (hierarchy: { brand: string; item_group_name: string }[]) => {
-  const currentYear = new Date().getFullYear();
-  const years = [currentYear - 2, currentYear - 1, currentYear];
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-  // Group hierarchy rows by brand so each brand keeps its real product groups
-  const brandMap = new Map<string, string[]>();
-  hierarchy.forEach(h => {
-    if (!h.brand || !h.item_group_name) return;
-    if (!brandMap.has(h.brand)) brandMap.set(h.brand, []);
-    const groups = brandMap.get(h.brand)!;
-    if (!groups.includes(h.item_group_name)) groups.push(h.item_group_name);
-  });
-
-  const channelList = ['Domestic', 'Export', 'Modern Trade'];
-  const regionList = ['North', 'Central', 'South'];
-  const warehouseList = ['WH-HN1', 'WH-DN1', 'WH-HCM1'];
-
-  const data: { year: number, month: string, brandName: string, productGroup: string, skuCode: string, skuName: string, channel: string, region: string, warehouse: string, forecast: number, actual: number }[] = [];
-
-  const brandList = [...brandMap.keys()];
-  years.forEach(year => {
-    const yearMult = year === currentYear - 2 ? 0.8 : year === currentYear - 1 ? 0.9 : 1.0;
-    months.forEach((month, mIdx) => {
-      const seasonality = 1 + Math.sin(mIdx / 11 * Math.PI) * 0.2;
-      brandList.forEach((brandName, bIdx) => {
-        const groups = brandMap.get(brandName) || [];
-        const baseVol = 12000 + ((bIdx * 1730) % 8000);
-        const totalForecast = baseVol * yearMult * seasonality;
-        groups.forEach((group, gIdx) => {
-          // 2 mock SKUs per group
-          for (let skuIdx = 0; skuIdx < 2; skuIdx++) {
-            const skuCode = `SKU-${(bIdx + 1).toString().padStart(2, '0')}${(gIdx + 1).toString().padStart(2, '0')}${String.fromCharCode(65 + skuIdx)}`;
-            const skuName = `${group} Product ${String.fromCharCode(65 + skuIdx)}`;
-            const pseudoRandom1 = ((mIdx * 13) + (bIdx * 7) + (gIdx * 5) + (skuIdx * 3) + year * 3) % 100 / 100;
-            const pseudoRandom2 = ((mIdx * 17) + (bIdx * 11) + (gIdx * 7) + (skuIdx * 5) + year * 5) % 100 / 100;
-            const skuForecast = Math.round((totalForecast / Math.max(1, groups.length * 2)) * (0.9 + pseudoRandom1 * 0.2));
-            const skuActual = Math.round(skuForecast * (0.85 + pseudoRandom2 * 0.25));
-            data.push({
-              year, month, brandName, productGroup: group, skuCode, skuName,
-              channel: channelList[(bIdx + gIdx + skuIdx) % channelList.length],
-              region: regionList[(bIdx + gIdx + skuIdx + 1) % regionList.length],
-              warehouse: warehouseList[(bIdx + gIdx + skuIdx) % warehouseList.length],
-              forecast: skuForecast, actual: skuActual,
-            });
-          }
-        });
-      });
-    });
-  });
-  return data;
-};
-
-// Static fallback used before hierarchy loads
-const fallbackHierarchy = [
-  { brand: 'Golden Harvest', item_group_name: 'Rice & Grains' },
-  { brand: 'VietTea', item_group_name: 'Beverages' },
-  { brand: 'Hao Hao', item_group_name: 'Instant Noodles' },
-  { brand: 'Vinamilk', item_group_name: 'Dairy' },
-];
+import { Download, Search, Loader2 } from 'lucide-react';
+// XLSX is dynamically imported when needed to avoid OOM in dev
+import { dashboardApi, MonthlyComparisonRow } from '../../../lib/api';
 
 // Types for the flat matrix
 type MonthMetrics = { forecast: number, actual: number, variance: number };
@@ -87,11 +15,11 @@ interface FlatRow {
   key: string;
   brand: string;
   productGroup: string;
-  skuCode: string;
-  skuName: string;
-  channel: string;
-  region: string;
-  warehouse: string;
+  itemCode: string;
+  itemName: string;
+  warehouseCode: string;
+  warehouseName: string;
+  warehouseRegion: string;
   months: Record<string, MonthMetrics>;
 }
 
@@ -120,72 +48,71 @@ export default function MonthlyComparisonPage() {
   const [monthFilter, setMonthFilter] = useState<string[]>([]);
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
   const [productGroupFilter, setProductGroupFilter] = useState<string[]>([]);
-  const [hierarchy, setHierarchy] = useState<ProductHierarchy[]>([]);
   const [skuSearch, setSkuSearch] = useState<string>('');
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [showBrandDropdown, setShowBrandDropdown] = useState(false);
   const [showGroupDropdown, setShowGroupDropdown] = useState(false);
 
+  // Data from API
+  const [rawData, setRawData] = useState<MonthlyComparisonRow[]>([]);
+  const [brands, setBrands] = useState<string[]>([]);
+  const [productGroups, setProductGroups] = useState<{ code: string; name: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const ALL_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  // Fetch product hierarchy from master data on mount
+  // Fetch data from API when year changes
   useEffect(() => {
-    const fetchAll = async () => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
       try {
-        let all: ProductHierarchy[] = [];
-        let p = 1;
-        while (true) {
-          const res = await masterDataApi.productHierarchy.list({ page: p, page_size: 100 });
-          all = [...all, ...res.items];
-          if (all.length >= res.total || res.items.length === 0) break;
-          p++;
-        }
-        setHierarchy(all);
-      } catch (e) {}
+        const res = await dashboardApi.monthlyComparison({ year: yearFilter });
+        setRawData(res.data);
+        setBrands(res.brands);
+        setProductGroups(res.product_groups);
+      } catch (e: any) {
+        setError(e.message || 'Failed to load data');
+        setRawData([]);
+      } finally {
+        setLoading(false);
+      }
     };
-    fetchAll();
-  }, []);
+    fetchData();
+  }, [yearFilter]);
 
-  // Build granular matrix data from the live hierarchy (falls back to a small stub before fetch completes)
-  const granularMonthlyData = useMemo(() => {
-    const source = hierarchy.length > 0 ? hierarchy : fallbackHierarchy;
-    return generateGranularData(source);
-  }, [hierarchy]);
-
-  // Derive brands and product groups for filters
-  const brands = useMemo(() => {
-    const source = hierarchy.length > 0 ? hierarchy : fallbackHierarchy;
-    return [...new Set(source.map(h => h.brand))].filter(Boolean).sort();
-  }, [hierarchy]);
-
-  const productGroups = useMemo(() => {
-    const source = hierarchy.length > 0 ? hierarchy : fallbackHierarchy;
-    const filtered = brandFilter.length > 0 ? source.filter(h => brandFilter.includes(h.brand)) : source;
-    return [...new Set(filtered.map(h => h.item_group_name).filter(Boolean))].sort();
-  }, [hierarchy, brandFilter]);
+  // Filter available product groups based on selected brands
+  const filteredProductGroups = useMemo(() => {
+    if (brandFilter.length === 0) return productGroups;
+    const groupsFromData = new Set(
+      rawData.filter(d => brandFilter.includes(d.brand)).map(d => d.product_group)
+    );
+    return productGroups.filter(pg => groupsFromData.has(pg.name));
+  }, [productGroups, brandFilter, rawData]);
 
   // Reset product group filter if it becomes invalid
   useEffect(() => {
     if (productGroupFilter.length > 0) {
-      const validGroups = productGroupFilter.filter(g => productGroups.includes(g));
+      const validNames = filteredProductGroups.map(pg => pg.name);
+      const validGroups = productGroupFilter.filter(g => validNames.includes(g));
       if (validGroups.length !== productGroupFilter.length) setProductGroupFilter(validGroups);
     }
-  }, [productGroups, productGroupFilter]);
+  }, [filteredProductGroups, productGroupFilter]);
 
-  // Apply filters to granular data
+  // Apply client-side filters (month, brand, group, search)
   const filteredData = useMemo(() => {
-    return granularMonthlyData.filter(item => {
-      if (item.year !== yearFilter) return false;
-      if (monthFilter.length > 0 && !monthFilter.includes(item.month)) return false;
-      if (brandFilter.length > 0 && !brandFilter.includes(item.brandName)) return false;
-      if (productGroupFilter.length > 0 && !productGroupFilter.includes(item.productGroup)) return false;
+    return rawData.filter(item => {
+      if (monthFilter.length > 0 && !monthFilter.includes(item.month_name)) return false;
+      if (brandFilter.length > 0 && !brandFilter.includes(item.brand)) return false;
+      if (productGroupFilter.length > 0 && !productGroupFilter.includes(item.product_group)) return false;
       if (skuSearch) {
         const q = skuSearch.toLowerCase();
-        if (!item.skuCode.toLowerCase().includes(q) && !item.skuName.toLowerCase().includes(q) && !item.brandName.toLowerCase().includes(q) && !item.productGroup.toLowerCase().includes(q)) return false;
+        if (!item.item_code.toLowerCase().includes(q) && !item.item_name.toLowerCase().includes(q) && !item.brand.toLowerCase().includes(q) && !item.product_group.toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [granularMonthlyData, yearFilter, monthFilter, brandFilter, productGroupFilter, skuSearch]);
+  }, [rawData, monthFilter, brandFilter, productGroupFilter, skuSearch]);
 
   // Build flat SKU-level rows for the matrix
   const flatRows = useMemo(() => {
@@ -197,24 +124,24 @@ export default function MonthlyComparisonPage() {
     };
 
     filteredData.forEach(row => {
-      const key = `${row.brandName}|${row.productGroup}|${row.skuCode}|${row.channel}|${row.region}|${row.warehouse}`;
+      const key = `${row.brand}|${row.product_group}|${row.item_code}|${row.warehouse_code}`;
       if (!map.has(key)) {
         map.set(key, {
-          key, brand: row.brandName, productGroup: row.productGroup, skuCode: row.skuCode, skuName: row.skuName,
-          channel: row.channel, region: row.region, warehouse: row.warehouse,
+          key, brand: row.brand, productGroup: row.product_group, itemCode: row.item_code, itemName: row.item_name,
+          warehouseCode: row.warehouse_code, warehouseName: row.warehouse_name, warehouseRegion: row.warehouse_region,
           months: getEmptyMonths(),
         });
       }
       const entry = map.get(key)!;
-      entry.months[row.month].forecast += row.forecast;
-      entry.months[row.month].actual += row.actual;
-      entry.months[row.month].variance = entry.months[row.month].actual - entry.months[row.month].forecast;
+      entry.months[row.month_name].forecast += row.forecast;
+      entry.months[row.month_name].actual += row.actual;
+      entry.months[row.month_name].variance = entry.months[row.month_name].actual - entry.months[row.month_name].forecast;
     });
 
-    return [...map.values()].sort((a, b) => a.brand.localeCompare(b.brand) || a.productGroup.localeCompare(b.productGroup) || a.skuCode.localeCompare(b.skuCode));
+    return [...map.values()].sort((a, b) => a.brand.localeCompare(b.brand) || a.productGroup.localeCompare(b.productGroup) || a.itemCode.localeCompare(b.itemCode));
   }, [filteredData]);
 
-  // Aggregate for the Chart & KPIs (summing up all brands/groups)
+  // Aggregate for the Chart & KPIs
   const monthlyAggregated = useMemo(() => {
     const displayMonths = monthFilter.length > 0 ? ALL_MONTHS.filter(m => monthFilter.includes(m)) : ALL_MONTHS;
     return displayMonths.map(month => {
@@ -234,21 +161,22 @@ export default function MonthlyComparisonPage() {
   const totalActual = monthlyAggregated.reduce((s, d) => s + d.actual, 0);
   const bias = totalActual > 0 ? (((totalForecast - totalActual) / totalActual) * 100).toFixed(1) : '0.0';
 
-  // Months to display (filtered or all)
+  // Months to display
   const displayMonths = useMemo(() =>
     monthFilter.length > 0 ? ALL_MONTHS.filter(m => monthFilter.includes(m)) : ALL_MONTHS,
   [monthFilter]);
 
-  const handleExportExcel = useCallback(() => {
-    const headerRow1 = ['Brand', 'Product Group', 'SKU Code', 'SKU Name', 'Channel', 'Region', 'Warehouse'];
-    const headerRow2 = ['', '', '', '', '', '', ''];
+  const handleExportExcel = useCallback(async () => {
+    const XLSX = await import('xlsx-js-style');
+    const headerRow1 = ['Brand', 'Product Group', 'Item Code', 'Item Name', 'Warehouse', 'Region'];
+    const headerRow2 = ['', '', '', '', '', ''];
     const merges = [
       { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }, { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } }, { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
-      { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } }, { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } }, { s: { r: 0, c: 5 }, e: { r: 1, c: 5 } }, { s: { r: 0, c: 6 }, e: { r: 1, c: 6 } }
+      { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } }, { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } }, { s: { r: 0, c: 5 }, e: { r: 1, c: 5 } }
     ];
     
     displayMonths.forEach((m, idx) => {
-      const startCol = 7 + (idx * 4);
+      const startCol = 6 + (idx * 4);
       merges.push({ s: { r: 0, c: startCol }, e: { r: 0, c: startCol + 3 } });
       headerRow1.push(m, '', '', '');
       headerRow2.push('Forecast', 'Actual', 'Variance', 'FA%');
@@ -258,8 +186,8 @@ export default function MonthlyComparisonPage() {
     
     flatRows.forEach(row => {
       const rowData: any[] = [
-        row.brand, row.productGroup, row.skuCode, row.skuName,
-        row.channel, row.region, row.warehouse
+        row.brand, row.productGroup, row.itemCode, row.itemName,
+        row.warehouseName, row.warehouseRegion
       ];
       displayMonths.forEach(m => {
         const cell = row.months[m] || { forecast: 0, actual: 0, variance: 0 };
@@ -272,12 +200,11 @@ export default function MonthlyComparisonPage() {
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!merges'] = merges;
     
-    const colCount = 7 + displayMonths.length * 4;
-    const cols = [{ wch: 20 }, { wch: 22 }, { wch: 15 }, { wch: 30 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
+    const cols = [{ wch: 20 }, { wch: 22 }, { wch: 15 }, { wch: 30 }, { wch: 20 }, { wch: 12 }];
     for(let i=0; i<displayMonths.length * 4; i++) cols.push({ wch: 12 });
     ws['!cols'] = cols;
 
-    // Apply header styling
+    const colCount = 6 + displayMonths.length * 4;
     for (let c = 0; c < colCount; c++) {
       const cell1 = XLSX.utils.encode_cell({ r: 0, c });
       const cell2 = XLSX.utils.encode_cell({ r: 1, c });
@@ -285,12 +212,11 @@ export default function MonthlyComparisonPage() {
       if (ws[cell2]) ws[cell2].s = { font: { bold: true, color: { rgb: '555555' } }, alignment: { horizontal: 'center' } };
     }
 
-    // Apply number formatting and variance font colors to data rows
     const numFmt = '#,##0';
     flatRows.forEach((row, rowIdx) => {
-      const dataRow = rowIdx + 2; // +2 for two header rows
+      const dataRow = rowIdx + 2;
       displayMonths.forEach((m, mIdx) => {
-        const forecastCol = 7 + (mIdx * 4);
+        const forecastCol = 6 + (mIdx * 4);
         const actualCol = forecastCol + 1;
         const varianceCol = forecastCol + 2;
         const faCol = forecastCol + 3;
@@ -405,17 +331,17 @@ export default function MonthlyComparisonPage() {
             </div>
             {showGroupDropdown && (
               <div style={{ position: 'absolute', top: '100%', left: 0, minWidth: '100%', zIndex: 12, background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', maxHeight: 250, overflowY: 'auto', padding: 'var(--space-2)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                {productGroups.map(pg => (
-                  <label key={pg} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2)', cursor: 'pointer', borderRadius: 'var(--radius-sm)' }}>
+                {filteredProductGroups.map(pg => (
+                  <label key={pg.code} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2)', cursor: 'pointer', borderRadius: 'var(--radius-sm)' }}>
                     <input 
                       type="checkbox" 
-                      checked={productGroupFilter.includes(pg)}
+                      checked={productGroupFilter.includes(pg.name)}
                       onChange={e => {
-                        const nc = e.target.checked ? [...productGroupFilter, pg] : productGroupFilter.filter(x => x !== pg);
+                        const nc = e.target.checked ? [...productGroupFilter, pg.name] : productGroupFilter.filter(x => x !== pg.name);
                         setProductGroupFilter(nc);
                       }}
                     />
-                    <span style={{ fontSize: 'var(--font-size-sm)' }}>{pg}</span>
+                    <span style={{ fontSize: 'var(--font-size-sm)' }}>{pg.name}</span>
                   </label>
                 ))}
               </div>
@@ -452,145 +378,156 @@ export default function MonthlyComparisonPage() {
             </button>
           )}
 
-          <button className="btn btn-primary" onClick={handleExportExcel}>
+          <button className="btn btn-primary" onClick={handleExportExcel} disabled={loading || flatRows.length === 0}>
             <Download size={16} style={{ marginRight: 8 }} /> Export Matrix
           </button>
         </div>
       </div>
 
-      {/* Summary KPIs */}
-      <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-        <div className="kpi-card" style={{ '--kpi-color': '#6366f1' } as React.CSSProperties}>
-          <div className="kpi-label">Average FA%</div>
-          <div className="kpi-value">{avgFA}%</div>
+      {/* Loading State */}
+      {loading && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 'var(--space-12)', gap: 'var(--space-3)' }}>
+          <Loader2 size={24} className="spin" style={{ animation: 'spin 1s linear infinite' }} />
+          <span style={{ color: 'var(--color-text-muted)' }}>Loading forecast vs actual data...</span>
         </div>
-        <div className="kpi-card" style={{ '--kpi-color': '#22c55e' } as React.CSSProperties}>
-          <div className="kpi-label">Total Actual Sales</div>
-          <div className="kpi-value">{(totalActual / 1000).toFixed(0)}K</div>
-        </div>
-        <div className="kpi-card" style={{ '--kpi-color': parseFloat(bias) > 0 ? '#f59e0b' : '#22c55e' } as React.CSSProperties}>
-          <div className="kpi-label">Forecast Bias</div>
-          <div className="kpi-value">{bias}%</div>
-          <div className="card-subtitle" style={{ marginTop: 4 }}>
-            {parseFloat(bias) > 0 ? 'Over-forecasting' : 'Under-forecasting'}
-          </div>
-        </div>
-      </div>
+      )}
 
-      {/* Chart */}
-      <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-        <div className="card-header">
-          <div>
-            <div className="card-title">Forecast vs Actual by Month</div>
-            <div className="card-subtitle">Aggregated totals based on applied filters</div>
-          </div>
+      {/* Error State */}
+      {error && !loading && (
+        <div className="card" style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--color-danger)' }}>
+          <p>Failed to load data: {error}</p>
+          <button className="btn btn-primary" onClick={() => setYearFilter(yearFilter)} style={{ marginTop: 'var(--space-4)' }}>
+            Retry
+          </button>
         </div>
-        <ResponsiveContainer width="100%" height={380}>
-          <ComposedChart data={monthlyAggregated} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="colorForecast" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.9} />
-                <stop offset="95%" stopColor="#6366f1" stopOpacity={0.5} />
-              </linearGradient>
-              <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#22c55e" stopOpacity={0.9} />
-                <stop offset="95%" stopColor="#22c55e" stopOpacity={0.5} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-            <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-            <YAxis yAxisId="left" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-            <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 12, fill: '#94a3b8' }} unit="%" />
-            <Tooltip contentStyle={tooltipStyle} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar yAxisId="left" dataKey="forecast" name="Forecast" fill="url(#colorForecast)" radius={[4, 4, 0, 0]} />
-            <Bar yAxisId="left" dataKey="actual" name="Actual" fill="url(#colorActual)" radius={[4, 4, 0, 0]} />
-            <Line yAxisId="right" type="monotone" dataKey="fa" name="FA%" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, strokeWidth: 0 }} style={{ filter: 'drop-shadow(0px 4px 6px rgba(245,158,11,0.4))' }} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
+      )}
 
-      {/* Monthly Matrix Detail */}
-      <div className="card" style={{ overflow: 'hidden' }}>
-        <div className="card-header">
-          <div className="card-title">Monthly Matrix Detail</div>
-          <div className="card-subtitle">SKU-level forecast vs actual by month. Scroll horizontally for months.</div>
-        </div>
-        
-        <div style={{ overflowX: 'auto', maxWidth: '100%', paddingBottom: 'var(--space-2)' }}>
-          <table className="data-table" style={{ minWidth: 'max-content', borderCollapse: 'separate', borderSpacing: 0 }}>
-            <thead>
-              <tr>
-                <th rowSpan={2} style={{ minWidth: 160 }}>Brand</th>
-                <th rowSpan={2} style={{ minWidth: 160 }}>Product Group</th>
-                <th rowSpan={2} style={{ minWidth: 120 }}>SKU Code</th>
-                <th rowSpan={2} style={{ minWidth: 200 }}>SKU Name</th>
-                <th rowSpan={2} style={{ textAlign: 'center', minWidth: 100 }}>Channel</th>
-                <th rowSpan={2} style={{ textAlign: 'center', minWidth: 90 }}>Region</th>
-                <th rowSpan={2} style={{ textAlign: 'center', minWidth: 100 }}>Warehouse</th>
-                {displayMonths.map(m => (
-                  <th colSpan={4} key={m} style={{ textAlign: 'center', borderLeft: '1px solid var(--color-border)' }}>{m}</th>
-                ))}
-              </tr>
-              <tr>
-                {displayMonths.map(m => (
-                  <React.Fragment key={`${m}-sub`}>
-                    <th style={{ borderLeft: '1px solid var(--color-border)', fontSize: '11px', color: 'var(--color-text-muted)' }}>Forecast</th>
-                    <th style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Actual</th>
-                    <th style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Variance</th>
-                    <th style={{ fontSize: '11px', color: '#f59e0b' }}>FA%</th>
-                  </React.Fragment>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {flatRows.map(row => (
-                <tr key={row.key} style={{ transition: 'background 0.2s', borderBottom: '1px solid var(--color-border)' }}>
-                  {/* Brand */}
-                  <td style={{ borderBottom: '1px solid var(--color-border)' }}>{row.brand}</td>
-                  {/* Product Group */}
-                  <td style={{ borderBottom: '1px solid var(--color-border)' }}>{row.productGroup}</td>
-                  {/* SKU Code */}
-                  <td style={{ borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem', fontWeight: 500 }}>{row.skuCode}</td>
-                  {/* SKU Name */}
-                  <td style={{ borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem', color: 'var(--color-text-primary)' }}>{row.skuName}</td>
-                  {/* Channel */}
-                  <td style={{ textAlign: 'center', fontSize: '0.8125rem', borderBottom: '1px solid var(--color-border)' }}>
-                    {row.channel}
-                  </td>
-                  {/* Region */}
-                  <td style={{ textAlign: 'center', fontSize: '0.8125rem', borderBottom: '1px solid var(--color-border)' }}>{row.region}</td>
-                  {/* Warehouse */}
-                  <td style={{ textAlign: 'center', fontSize: '0.8125rem', borderBottom: '1px solid var(--color-border)' }}>
-                    {row.warehouse}
-                  </td>
-                  {displayMonths.map(m => {
-                    const cell = row.months[m] || { forecast: 0, actual: 0, variance: 0 };
-                    const fa = cell.forecast > 0 ? Math.max(0, 100 - (Math.abs(cell.forecast - cell.actual) / cell.forecast) * 100) : 0;
-                    return (
-                      <React.Fragment key={`${row.key}-${m}`}>
-                        <td style={{ borderLeft: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)', background: 'rgba(255,255,255,0.01)' }}>{cell.forecast.toLocaleString()}</td>
-                        <td style={{ borderBottom: '1px solid var(--color-border)' }}>{cell.actual.toLocaleString()}</td>
-                        <td style={{ borderBottom: '1px solid var(--color-border)', color: cell.variance >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 500 }}>
-                          {cell.variance >= 0 ? '+' : ''}{cell.variance.toLocaleString()}
-                        </td>
-                        <td style={{ borderBottom: '1px solid var(--color-border)', color: fa >= 80 ? '#22c55e' : fa >= 60 ? '#f59e0b' : '#ef4444', fontWeight: 600, textAlign: 'right' }}>
-                          {fa.toFixed(1)}%
-                        </td>
+      {!loading && !error && (
+        <>
+          {/* Summary KPIs */}
+          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            <div className="kpi-card" style={{ '--kpi-color': '#6366f1' } as React.CSSProperties}>
+              <div className="kpi-label">Average FA%</div>
+              <div className="kpi-value">{avgFA}%</div>
+            </div>
+            <div className="kpi-card" style={{ '--kpi-color': '#22c55e' } as React.CSSProperties}>
+              <div className="kpi-label">Total Actual Sales</div>
+              <div className="kpi-value">{(totalActual / 1000).toFixed(0)}K</div>
+            </div>
+            <div className="kpi-card" style={{ '--kpi-color': parseFloat(bias) > 0 ? '#f59e0b' : '#22c55e' } as React.CSSProperties}>
+              <div className="kpi-label">Forecast Bias</div>
+              <div className="kpi-value">{bias}%</div>
+              <div className="card-subtitle" style={{ marginTop: 4 }}>
+                {parseFloat(bias) > 0 ? 'Over-forecasting' : 'Under-forecasting'}
+              </div>
+            </div>
+          </div>
+
+          {/* Chart */}
+          <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+            <div className="card-header">
+              <div>
+                <div className="card-title">Forecast vs Actual by Month</div>
+                <div className="card-subtitle">Aggregated totals based on applied filters</div>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={380}>
+              <ComposedChart data={monthlyAggregated} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorForecast" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.9} />
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0.5} />
+                  </linearGradient>
+                  <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.9} />
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0.5} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 12, fill: '#94a3b8' }} unit="%" />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar yAxisId="left" dataKey="forecast" name="Forecast" fill="url(#colorForecast)" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="left" dataKey="actual" name="Actual" fill="url(#colorActual)" radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="fa" name="FA%" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, strokeWidth: 0 }} style={{ filter: 'drop-shadow(0px 4px 6px rgba(245,158,11,0.4))' }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Monthly Matrix Detail */}
+          <div className="card" style={{ overflow: 'hidden' }}>
+            <div className="card-header">
+              <div className="card-title">Monthly Matrix Detail</div>
+              <div className="card-subtitle">SKU-level forecast vs actual by month. Scroll horizontally for months.</div>
+            </div>
+            
+            <div style={{ overflowX: 'auto', maxWidth: '100%', paddingBottom: 'var(--space-2)' }}>
+              <table className="data-table" style={{ minWidth: 'max-content', borderCollapse: 'separate', borderSpacing: 0 }}>
+                <thead>
+                  <tr>
+                    <th rowSpan={2} style={{ minWidth: 160 }}>Brand</th>
+                    <th rowSpan={2} style={{ minWidth: 160 }}>Product Group</th>
+                    <th rowSpan={2} style={{ minWidth: 120 }}>Item Code</th>
+                    <th rowSpan={2} style={{ minWidth: 200 }}>Item Name</th>
+                    <th rowSpan={2} style={{ textAlign: 'center', minWidth: 140 }}>Warehouse</th>
+                    <th rowSpan={2} style={{ textAlign: 'center', minWidth: 90 }}>Region</th>
+                    {displayMonths.map(m => (
+                      <th colSpan={4} key={m} style={{ textAlign: 'center', borderLeft: '1px solid var(--color-border)' }}>{m}</th>
+                    ))}
+                  </tr>
+                  <tr>
+                    {displayMonths.map(m => (
+                      <React.Fragment key={`${m}-sub`}>
+                        <th style={{ borderLeft: '1px solid var(--color-border)', fontSize: '11px', color: 'var(--color-text-muted)' }}>Forecast</th>
+                        <th style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Actual</th>
+                        <th style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Variance</th>
+                        <th style={{ fontSize: '11px', color: '#f59e0b' }}>FA%</th>
                       </React.Fragment>
-                    );
-                  })}
-                </tr>
-              ))}
-              {flatRows.length === 0 && (
-                <tr>
-                <td colSpan={7 + displayMonths.length * 4} style={{ textAlign: 'center', padding: 'var(--space-8)' }}>No data available for the selected filters.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {flatRows.map(row => (
+                    <tr key={row.key} style={{ transition: 'background 0.2s', borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ borderBottom: '1px solid var(--color-border)' }}>{row.brand}</td>
+                      <td style={{ borderBottom: '1px solid var(--color-border)' }}>{row.productGroup}</td>
+                      <td style={{ borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem', fontWeight: 500 }}>{row.itemCode}</td>
+                      <td style={{ borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem', color: 'var(--color-text-primary)' }}>{row.itemName}</td>
+                      <td style={{ textAlign: 'center', fontSize: '0.8125rem', borderBottom: '1px solid var(--color-border)' }}>
+                        {row.warehouseName}
+                      </td>
+                      <td style={{ textAlign: 'center', fontSize: '0.8125rem', borderBottom: '1px solid var(--color-border)' }}>{row.warehouseRegion}</td>
+                      {displayMonths.map(m => {
+                        const cell = row.months[m] || { forecast: 0, actual: 0, variance: 0 };
+                        const fa = cell.forecast > 0 ? Math.max(0, 100 - (Math.abs(cell.forecast - cell.actual) / cell.forecast) * 100) : 0;
+                        return (
+                          <React.Fragment key={`${row.key}-${m}`}>
+                            <td style={{ borderLeft: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)', background: 'rgba(255,255,255,0.01)' }}>{cell.forecast.toLocaleString()}</td>
+                            <td style={{ borderBottom: '1px solid var(--color-border)' }}>{cell.actual.toLocaleString()}</td>
+                            <td style={{ borderBottom: '1px solid var(--color-border)', color: cell.variance >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 500 }}>
+                              {cell.variance >= 0 ? '+' : ''}{cell.variance.toLocaleString()}
+                            </td>
+                            <td style={{ borderBottom: '1px solid var(--color-border)', color: fa >= 80 ? '#22c55e' : fa >= 60 ? '#f59e0b' : '#ef4444', fontWeight: 600, textAlign: 'right' }}>
+                              {fa.toFixed(1)}%
+                            </td>
+                          </React.Fragment>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                  {flatRows.length === 0 && (
+                    <tr>
+                    <td colSpan={6 + displayMonths.length * 4} style={{ textAlign: 'center', padding: 'var(--space-8)' }}>No data available for the selected filters.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ from sqlalchemy import select, func, desc
 from app.database import get_db
 from app.models.transactions import ActualSales, InventoryOnhand
 from app.models.forecasts import ForecastResult, ForecastAccuracy, ModelType
-from app.models.master_data import Item
+from app.models.master_data import Item, ProductHierarchy, Warehouse
 from app.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -176,3 +176,124 @@ async def dashboard_summary(
         "topSellingSKUs": top_selling_skus,
         "topInventorySKUs": top_inventory_skus,
     }
+
+
+@router.get("/monthly-comparison")
+async def monthly_comparison_dashboard(
+    year: int = Query(..., description="Year to compare"),
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    # 1. Fetch Forecast
+    forecast_q = (
+        select(
+            ForecastResult.item_code,
+            ForecastResult.warehouse_code,
+            ForecastResult.month,
+            func.sum(ForecastResult.forecast_qty).label("forecast_qty")
+        )
+        .where(ForecastResult.year == year)
+        .where(ForecastResult.model_type == ModelType.ENSEMBLE)
+        .group_by(ForecastResult.item_code, ForecastResult.warehouse_code, ForecastResult.month)
+    )
+    forecast_res = await db.execute(forecast_q)
+    forecasts = forecast_res.all()
+
+    # 2. Fetch Actuals
+    actual_q = (
+        select(
+            ActualSales.item_code,
+            ActualSales.warehouse_code,
+            ActualSales.month,
+            func.sum(ActualSales.quantity).label("actual_qty")
+        )
+        .where(ActualSales.year == year)
+        .group_by(ActualSales.item_code, ActualSales.warehouse_code, ActualSales.month)
+    )
+    actual_res = await db.execute(actual_q)
+    actuals = actual_res.all()
+
+    # 3. Fetch Items & ProductHierarchy
+    item_q = (
+        select(
+            Item.item_code,
+            Item.item_name,
+            ProductHierarchy.brand,
+            ProductHierarchy.item_group_name
+        )
+        .outerjoin(ProductHierarchy, Item.item_group_code == ProductHierarchy.item_group_code)
+    )
+    item_res = await db.execute(item_q)
+    items_map = {
+        row.item_code: {
+            "item_name": row.item_name,
+            "brand": row.brand or "Unknown",
+            "product_group": row.item_group_name or "Unknown"
+        }
+        for row in item_res.all()
+    }
+
+    # 4. Fetch Warehouses
+    wh_q = select(Warehouse.warehouse_code, Warehouse.warehouse_name, Warehouse.warehouse_region)
+    wh_res = await db.execute(wh_q)
+    wh_map = {
+        row.warehouse_code: {
+            "warehouse_name": row.warehouse_name,
+            "warehouse_region": row.warehouse_region or "Unknown"
+        }
+        for row in wh_res.all()
+    }
+
+    # Aggregate by (item_code, warehouse_code, month)
+    aggregated = {}
+    
+    for row in forecasts:
+        key = (row.item_code, row.warehouse_code, row.month)
+        if key not in aggregated:
+            aggregated[key] = {"forecast": 0, "actual": 0}
+        aggregated[key]["forecast"] += float(row.forecast_qty or 0)
+
+    for row in actuals:
+        key = (row.item_code, row.warehouse_code, row.month)
+        if key not in aggregated:
+            aggregated[key] = {"forecast": 0, "actual": 0}
+        aggregated[key]["actual"] += float(row.actual_qty or 0)
+
+    month_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    data = []
+    brands_set = set()
+    product_groups_set = set()
+
+    for (ic, wc, m), metrics in aggregated.items():
+        item_info = items_map.get(ic, {"item_name": ic, "brand": "Unknown", "product_group": "Unknown"})
+        wh_info = wh_map.get(wc, {"warehouse_name": wc, "warehouse_region": "Unknown"})
+
+        brand = item_info["brand"]
+        pg = item_info["product_group"]
+
+        if brand and brand != "Unknown": brands_set.add(brand)
+        if pg and pg != "Unknown": product_groups_set.add(pg)
+
+        data.append({
+            "brand": brand,
+            "product_group": pg,
+            "item_code": ic,
+            "item_name": item_info["item_name"],
+            "warehouse_code": wc,
+            "warehouse_name": wh_info["warehouse_name"],
+            "warehouse_region": wh_info["warehouse_region"],
+            "month_name": month_names[m] if 1 <= m <= 12 else f"M{m}",
+            "forecast": metrics["forecast"],
+            "actual": metrics["actual"]
+        })
+
+    brands = sorted(list(brands_set))
+    product_groups = [{"code": pg, "name": pg} for pg in sorted(list(product_groups_set))]
+
+    return {
+        "data": data,
+        "brands": brands,
+        "product_groups": product_groups
+    }
+

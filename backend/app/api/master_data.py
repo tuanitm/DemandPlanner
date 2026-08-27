@@ -255,7 +255,7 @@ async def delete_bom(bom_id: int, db: AsyncSession = Depends(get_db), current_us
 
 @router.get("/warehouses", response_model=PaginatedResponse)
 async def list_warehouses(
-    page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+    page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=500),
     search: Optional[str] = None, region: Optional[str] = None,
     db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user),
 ):

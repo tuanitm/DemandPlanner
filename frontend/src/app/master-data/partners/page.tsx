@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Download } from 'lucide-react';
-import XLSX from 'xlsx-js-style';
+// xlsx-js-style removed — unused in this page
 import ImportExcel from '@/components/ui/ImportExcel';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import FilterBar, { FilterConfig } from '@/components/ui/FilterBar';
@@ -10,7 +10,7 @@ import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
-import { masterDataApi, PartnerGroup, Partner } from '@/lib/api';
+import { masterDataApi, PartnerGroup, Partner, Channel } from '@/lib/api';
 
 type Tab = 'groups' | 'partners';
 
@@ -35,7 +35,7 @@ export default function PartnersPage() {
   const [showChannelDropdown, setShowChannelDropdown] = useState(false);
   const [showPartnerGroupDropdown, setShowPartnerGroupDropdown] = useState(false);
 
-  const [dbChannels, setDbChannels] = useState<string[]>([]);
+  const [activeChannels, setActiveChannels] = useState<Channel[]>([]);
   const [allGroups, setAllGroups] = useState<PartnerGroup[]>([]);
   useEffect(() => {
     const fetchAll = async () => {
@@ -55,8 +55,15 @@ export default function PartnersPage() {
     };
     const fetchChannels = async () => {
       try {
-        const res = await masterDataApi.channels.list({ page: 1, page_size: 100 });
-        setDbChannels(res.items.map(c => c.channel_name));
+        let all: Channel[] = [];
+        let p = 1;
+        while (true) {
+          const res = await masterDataApi.channels.list({ page: p, page_size: 50 });
+          all = [...all, ...res.items];
+          if (all.length >= res.total || res.items.length === 0) break;
+          p++;
+        }
+        setActiveChannels(all.filter(c => c.status === 'Active'));
       } catch (e) {
         console.error("Failed to fetch channels", e);
       }
@@ -65,9 +72,20 @@ export default function PartnersPage() {
     fetchChannels();
   }, []);
 
-  const channelsList = useMemo(() => {
-    return [...new Set(allGroups.map(g => g.channel))].filter(Boolean).sort();
-  }, [allGroups]);
+  // Build channel options as {code, name} from active channels + any existing codes in groups
+  const channelOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    activeChannels.forEach(c => map.set(c.channel_code, c.channel_name));
+    // Include any group channel codes not in active channels (edge case: inactive/missing)
+    allGroups.forEach(g => { if (g.channel && !map.has(g.channel)) map.set(g.channel, g.channel); });
+    return [...map.entries()].map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allGroups, activeChannels]);
+
+  // Helper: resolve channel code to display name
+  const getChannelName = useCallback((channelCode: string) => {
+    const ch = activeChannels.find(c => c.channel_code === channelCode);
+    return ch ? ch.channel_name : channelCode;
+  }, [activeChannels]);
 
   const derivedPartnerGroups = useMemo(() => {
     const filtered = partnersFilters.channel.length > 0
@@ -115,7 +133,7 @@ export default function PartnersPage() {
       const group = allGroups.find(g => g.partner_grp_code === p.partner_grp_code);
       return {
         ...p,
-        channel: group ? group.channel : 'Unknown',
+        channel: group ? getChannelName(group.channel) : 'Unknown',
         group_name: group ? group.partner_grp_name : p.partner_grp_code
       };
     });
@@ -261,7 +279,7 @@ export default function PartnersPage() {
 
   const openCreateGroup = () => {
     setEditingGroup(null);
-    setGroupForm({ channel: dbChannels[0] || '', partner_grp_type: 'Customer', partner_grp_code: '', partner_grp_name: '', status: 'Active' });
+    setGroupForm({ channel: channelOptions[0]?.code || '', partner_grp_type: 'Customer', partner_grp_code: '', partner_grp_name: '', status: 'Active' });
     setShowGroupModal(true);
   };
 
@@ -282,7 +300,7 @@ export default function PartnersPage() {
       const exportRows = groups.map(g => ({
         'Code': g.partner_grp_code,
         'Name': g.partner_grp_name,
-        'Channel': g.channel,
+        'Channel': getChannelName(g.channel),
         'Type': g.partner_grp_type,
         'Status': g.status,
       }));
@@ -312,7 +330,7 @@ export default function PartnersPage() {
   const groupColumns: Column<PartnerGroup>[] = [
     { key: 'partner_grp_code', header: 'Code', width: '120px', render: (r) => <span>{r.partner_grp_code}</span> },
     { key: 'partner_grp_name', header: 'Name', render: (r) => <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{r.partner_grp_name}</span> },
-    { key: 'channel', header: 'Channel', width: '130px' },
+    { key: 'channel', header: 'Channel', width: '130px', render: (r) => <span>{getChannelName(r.channel)}</span> },
     { key: 'partner_grp_type', header: 'Type', width: '110px', render: (r) => <span className={`badge ${r.partner_grp_type === 'Customer' ? 'badge-success' : 'badge-info'}`}>{r.partner_grp_type}</span> },
     { key: 'status', header: 'Status', width: '100px' },
     { key: 'actions', header: '', width: '80px', render: (r) => (
@@ -386,18 +404,18 @@ export default function PartnersPage() {
             </div>
             {showChannelDropdown && (
               <div style={{ position: 'absolute', top: '100%', left: 0, minWidth: '100%', zIndex: 12, background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', maxHeight: 250, overflowY: 'auto', padding: 'var(--space-2)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                {channelsList.map(c => (
-                  <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2)', cursor: 'pointer', borderRadius: 'var(--radius-sm)' }}>
+                {channelOptions.map(c => (
+                  <label key={c.code} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2)', cursor: 'pointer', borderRadius: 'var(--radius-sm)' }}>
                     <input 
                       type="checkbox" 
-                      checked={partnersFilters.channel.includes(c)}
+                      checked={partnersFilters.channel.includes(c.code)}
                       onChange={e => {
-                        const nc = e.target.checked ? [...partnersFilters.channel, c] : partnersFilters.channel.filter(x => x !== c);
+                        const nc = e.target.checked ? [...partnersFilters.channel, c.code] : partnersFilters.channel.filter(x => x !== c.code);
                         setPartnersFilters(prev => ({ ...prev, channel: nc }));
                         setPartnersPage(1);
                       }}
                     />
-                    <span style={{ fontSize: 'var(--font-size-sm)' }}>{c}</span>
+                    <span style={{ fontSize: 'var(--font-size-sm)' }}>{c.name}</span>
                   </label>
                 ))}
               </div>
@@ -485,7 +503,7 @@ export default function PartnersPage() {
       <Modal isOpen={showGroupModal} onClose={() => { setShowGroupModal(false); setEditingGroup(null); }} title={editingGroup ? 'Edit Partner Group' : 'New Partner Group'} size="md"
         footer={<><button className="btn btn-secondary" onClick={() => { setShowGroupModal(false); setEditingGroup(null); }}>Cancel</button><button className="btn btn-primary" onClick={handleSaveGroup} disabled={saving}>{saving && <span className="loading-spinner" />}{editingGroup ? 'Update' : 'Create'}</button></>}>
         <div className="form-row form-row-2">
-          <div className="form-group"><label className="form-label">Channel *</label><select className="form-input form-select" value={groupForm.channel} onChange={(e) => setGroupForm({ ...groupForm, channel: e.target.value })}><option value="">Select channel...</option>{[...new Set([...dbChannels, ...(editingGroup && editingGroup.channel && !dbChannels.includes(editingGroup.channel) ? [editingGroup.channel] : [])])].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+          <div className="form-group"><label className="form-label">Channel *</label><select className="form-input form-select" value={groupForm.channel} onChange={(e) => setGroupForm({ ...groupForm, channel: e.target.value })}><option value="">Select channel...</option>{channelOptions.map(c => <option key={c.code} value={c.code}>{c.code} - {c.name}</option>)}</select></div>
           <div className="form-group"><label className="form-label">Type *</label><select className="form-input form-select" value={groupForm.partner_grp_type} onChange={(e) => setGroupForm({ ...groupForm, partner_grp_type: e.target.value })}><option value="Customer">Customer</option><option value="Supplier">Supplier</option></select></div>
         </div>
         <div className="form-row form-row-2">

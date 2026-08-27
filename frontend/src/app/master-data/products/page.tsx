@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Search, Download } from 'lucide-react';
-import XLSX from 'xlsx-js-style';
+// xlsx-js-style removed — unused in this page
 import ImportExcel from '@/components/ui/ImportExcel';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import FilterBar, { FilterConfig } from '@/components/ui/FilterBar';
@@ -105,11 +105,19 @@ export default function ProductsPage() {
   }, []);
 
   const brandOptions = useMemo(() => {
-    // Collect all active brands from master data + any existing brands in hierarchy (just in case they are missing or inactive)
-    const set = new Set(activeBrands.map(b => b.brand_name));
-    allHierarchy.forEach(h => { if (h.brand) set.add(h.brand); });
-    return [...set].sort();
+    // Build brand options as {code, name} objects from active brands + any existing codes in hierarchy
+    const map = new Map<string, string>();
+    activeBrands.forEach(b => map.set(b.brand_code, b.brand_name));
+    // Include any hierarchy brand codes not in active brands (edge case: inactive/missing brands)
+    allHierarchy.forEach(h => { if (h.brand && !map.has(h.brand)) map.set(h.brand, h.brand); });
+    return [...map.entries()].map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [allHierarchy, activeBrands]);
+
+  // Helper: resolve brand code to display name
+  const getBrandName = useCallback((brandCode: string) => {
+    const brand = activeBrands.find(b => b.brand_code === brandCode);
+    return brand ? brand.brand_name : brandCode;
+  }, [activeBrands]);
 
   const productGroups = useMemo(() => {
     const filtered = iFilters.brand.length > 0
@@ -291,7 +299,7 @@ export default function ProductsPage() {
     { key: 'item_group_code', header: 'Group Code', width: '120px' },
     { key: 'item_group_name', header: 'Group Name', render: (r) => <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{r.item_group_name}</span> },
     { key: 'business', header: 'Business', width: '120px' },
-    { key: 'brand', header: 'Brand', width: '120px' },
+    { key: 'brand', header: 'Brand', width: '120px', render: (r) => <span>{getBrandName(r.brand)}</span> },
     { key: 'item_category_code', header: 'Category', width: '100px' },
     { key: 'item_category_name', header: 'Category Name', width: '160px' },
     { key: 'status', header: 'Status', width: '90px' },
@@ -306,7 +314,7 @@ export default function ProductsPage() {
   const iCols: Column<Item>[] = [
     { key: 'brand', header: 'Brand', width: '120px', render: (r) => {
       const h = allHierarchy.find(x => x.item_group_code === r.item_group_code);
-      return <span>{h ? h.brand : '-'}</span>;
+      return <span>{h ? getBrandName(h.brand) : '-'}</span>;
     }},
     { key: 'item_group_code', header: 'Product Group', width: '150px', render: (r) => {
       const h = allHierarchy.find(x => x.item_group_code === r.item_group_code);
@@ -341,7 +349,7 @@ export default function ProductsPage() {
     const exportRows = dataToExport.map(r => {
       const h = allHierarchy.find(x => x.item_group_code === r.item_group_code);
       return {
-        'Brand': h ? h.brand : '-',
+        'Brand': h ? getBrandName(h.brand) : '-',
         'Product Group': h ? h.item_group_name : r.item_group_code,
         'SKU Code': r.item_code,
         'Vendor Code': r.item_partner_code || '',
@@ -406,17 +414,17 @@ export default function ProductsPage() {
             {showBrandDropdown && (
               <div style={{ position: 'absolute', top: '100%', left: 0, minWidth: '100%', zIndex: 12, background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', maxHeight: 250, overflowY: 'auto', padding: 'var(--space-2)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                 {brandOptions.map(b => (
-                  <label key={b} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2)', cursor: 'pointer', borderRadius: 'var(--radius-sm)' }}>
+                  <label key={b.code} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2)', cursor: 'pointer', borderRadius: 'var(--radius-sm)' }}>
                     <input 
                       type="checkbox" 
-                      checked={iFilters.brand.includes(b)}
+                      checked={iFilters.brand.includes(b.code)}
                       onChange={e => {
-                        const nb = e.target.checked ? [...iFilters.brand, b] : iFilters.brand.filter(x => x !== b);
+                        const nb = e.target.checked ? [...iFilters.brand, b.code] : iFilters.brand.filter(x => x !== b.code);
                         setIFilters(prev => ({ ...prev, brand: nb }));
                         setIPage(1);
                       }}
                     />
-                    <span style={{ fontSize: 'var(--font-size-sm)' }}>{b}</span>
+                    <span style={{ fontSize: 'var(--font-size-sm)' }}>{b.name}</span>
                   </label>
                 ))}
               </div>
@@ -535,7 +543,7 @@ export default function ProductsPage() {
             <label className="form-label">Brand *</label>
             <select className="form-input form-select" value={hForm.brand} onChange={(e) => setHForm({ ...hForm, brand: e.target.value })}>
               <option value="">Select brand...</option>
-              {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
+              {brandOptions.map(b => <option key={b.code} value={b.code}>{b.code} - {b.name}</option>)}
             </select>
           </div>
         </div>
