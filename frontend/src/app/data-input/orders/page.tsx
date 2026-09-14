@@ -13,6 +13,41 @@ import { transactionApi, PurchaseOrder, ProductionOrder } from '@/lib/api';
 
 type Tab = 'po' | 'mo';
 
+function NumericInput({ value, onChange, className, ...rest }: { value: number; onChange: (v: number) => void; className?: string; [k: string]: unknown }) {
+  const [focused, setFocused] = useState(false);
+  const [display, setDisplay] = useState('');
+
+  useEffect(() => {
+    if (!focused) setDisplay(value ? value.toLocaleString() : '0');
+  }, [value, focused]);
+
+  return (
+    <input
+      {...rest}
+      type="text"
+      inputMode="decimal"
+      className={className}
+      value={display}
+      onFocus={() => {
+        setFocused(true);
+        setDisplay(value ? value.toString() : '');
+      }}
+      onBlur={() => {
+        setFocused(false);
+        const parsed = parseFloat(display.replace(/,/g, '')) || 0;
+        const clamped = Math.max(0, parsed);
+        onChange(clamped);
+        setDisplay(clamped ? clamped.toLocaleString() : '0');
+      }}
+      onChange={(e) => {
+        setDisplay(e.target.value);
+        const parsed = parseFloat(e.target.value.replace(/,/g, '')) || 0;
+        onChange(Math.max(0, parsed));
+      }}
+    />
+  );
+}
+
 export default function OrdersPage() {
   const { addToast } = useToast();
   const [tab, setTab] = useState<Tab>('po');
@@ -65,6 +100,16 @@ export default function OrdersPage() {
   useEffect(() => { if (tab === 'mo') fetchMO(); }, [tab, fetchMO]);
 
   const handleSavePO = async () => {
+    // Validate: no negative Quantity, Price, or Amount
+    const warnings: string[] = [];
+    if (poForm.quantity < 0) warnings.push('Quantity must not be negative');
+    if (poForm.unit_price < 0) warnings.push('Unit Price must not be negative');
+    if (poForm.quantity * poForm.unit_price < 0) warnings.push('Amount (Qty × Price) must not be negative');
+    if (poForm.quantity <= 0) warnings.push('Quantity must be greater than 0');
+    if (warnings.length > 0) {
+      addToast('warning', 'Cannot save', warnings.join('. '));
+      return;
+    }
     setSaving(true);
     try {
       const payload = { ...poForm, eta: poForm.eta || null, partner_code: poForm.partner_code || null };
@@ -81,6 +126,14 @@ export default function OrdersPage() {
   };
 
   const handleSaveMO = async () => {
+    // Validate: no negative or zero Quantity
+    const warnings: string[] = [];
+    if (moForm.quantity < 0) warnings.push('Quantity must not be negative');
+    if (moForm.quantity <= 0) warnings.push('Quantity must be greater than 0');
+    if (warnings.length > 0) {
+      addToast('warning', 'Cannot save', warnings.join('. '));
+      return;
+    }
     setSaving(true);
     try {
       const payload = { ...moForm, planned_date: moForm.planned_date || null };
@@ -216,11 +269,11 @@ export default function OrdersPage() {
         </div>
         <div className="form-row form-row-2">
           <div className="form-group"><label className="form-label">Partner Code</label><input className="form-input" value={poForm.partner_code} onChange={e => setPoForm({...poForm, partner_code: e.target.value})} placeholder="e.g. BP-009" /></div>
-          <div className="form-group"><label className="form-label">Order Qty *</label><input className="form-input" type="number" value={poForm.quantity} onChange={e => setPoForm({...poForm, quantity: parseFloat(e.target.value) || 0})} /></div>
+          <div className="form-group"><label className="form-label">Order Qty *</label><NumericInput className="form-input" value={poForm.quantity} onChange={v => setPoForm({...poForm, quantity: v})} /></div>
         </div>
         <div className="form-row form-row-3">
           <div className="form-group"><label className="form-label">Currency</label><input className="form-input" value={poForm.currency} onChange={e => setPoForm({...poForm, currency: e.target.value})} placeholder="VND" /></div>
-          <div className="form-group"><label className="form-label">Unit Price</label><input className="form-input" type="number" value={poForm.unit_price} onChange={e => setPoForm({...poForm, unit_price: parseFloat(e.target.value) || 0})} /></div>
+          <div className="form-group"><label className="form-label">Unit Price</label><NumericInput className="form-input" value={poForm.unit_price} onChange={v => setPoForm({...poForm, unit_price: v})} /></div>
           <div className="form-group"><label className="form-label">ETA</label><input className="form-input" type="date" value={poForm.eta} onChange={e => setPoForm({...poForm, eta: e.target.value})} /></div>
         </div>
         <div className="form-row form-row-2">
@@ -249,7 +302,7 @@ export default function OrdersPage() {
         </div>
         <div className="form-row form-row-3">
           <div className="form-group"><label className="form-label">Warehouse *</label><input className="form-input" value={moForm.warehouse_code} onChange={e => setMoForm({...moForm, warehouse_code: e.target.value})} placeholder="e.g. WH-BD1" /></div>
-          <div className="form-group"><label className="form-label">Planned Qty *</label><input className="form-input" type="number" value={moForm.quantity} onChange={e => setMoForm({...moForm, quantity: parseFloat(e.target.value) || 0})} /></div>
+          <div className="form-group"><label className="form-label">Planned Qty *</label><NumericInput className="form-input" value={moForm.quantity} onChange={v => setMoForm({...moForm, quantity: v})} /></div>
           <div className="form-group"><label className="form-label">Planned Date</label><input className="form-input" type="date" value={moForm.planned_date} onChange={e => setMoForm({...moForm, planned_date: e.target.value})} /></div>
         </div>
         <div className="form-group">
@@ -261,7 +314,7 @@ export default function OrdersPage() {
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => setShowMoModal(false)}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSaveMO} disabled={saving || !moForm.mo_number || !moForm.item_code}>
+          <button className="btn btn-primary" onClick={handleSaveMO} disabled={saving || !moForm.mo_number || !moForm.item_code || moForm.quantity <= 0}>
             {saving ? <><span className="loading-spinner" /> Saving...</> : editMoId ? 'Save Changes' : 'Create MO'}
           </button>
         </div>

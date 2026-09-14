@@ -13,7 +13,8 @@ from app.models.transactions import *  # noqa: F401,F403
 from app.models.forecasts import *  # noqa: F401,F403
 from app.models.forecast_audit import *  # noqa: F401,F403
 from app.api import (
-    auth, master_data, transactions, import_export, sap, forecast_api, dashboard
+    auth, master_data, transactions, import_export, sap, forecast_api, dashboard,
+    sales_forecast, sales_entry
 )
 from app.services.auth_service import hash_password
 
@@ -83,6 +84,8 @@ app.include_router(import_export.router)
 app.include_router(sap.router)
 app.include_router(forecast_api.router)
 app.include_router(dashboard.router)
+app.include_router(sales_forecast.router)
+app.include_router(sales_entry.router)
 
 
 @app.get("/api/health")

@@ -4,7 +4,7 @@ Master Data API routes: CRUD for Partners, Products, Items, Warehouses, BOM, Exc
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from app.database import get_db
 from app.models.master_data import (
     PartnerGroup, Partner, ProductHierarchy, Item,

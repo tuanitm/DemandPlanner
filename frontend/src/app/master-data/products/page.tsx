@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Search, Download } from 'lucide-react';
-// xlsx-js-style removed — unused in this page
+import XLSX from 'xlsx-js-style';
 import ImportExcel from '@/components/ui/ImportExcel';
 import DataTable, { Column } from '@/components/ui/DataTable';
 import FilterBar, { FilterConfig } from '@/components/ui/FilterBar';

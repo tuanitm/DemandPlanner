@@ -363,8 +363,11 @@ async def upload_excel(
                         else:
                             data[field] = int(val) if val else None
                     # Handle numeric float fields
-                    elif field in ('quantity', 'rate', 'amount', 'unit_cost', 'received_qty', 'completed_qty'):
+                    elif field in ('quantity', 'rate', 'amount', 'unit_cost', 'unit_price', 'received_qty', 'completed_qty'):
                         data[field] = float(val) if val else 0
+                        # Reject zero or negative values for quantity and price fields
+                        if field in ('quantity', 'unit_price', 'unit_cost') and data[field] <= 0:
+                            raise ValueError(f"{field} must be greater than 0 (got {data[field]})")
                     # Handle date fields
                     elif field in ('expiry_date', 'eta', 'planned_date', 'trans_date', 'demand_date'):
                         from datetime import date as date_type, datetime as dt_type

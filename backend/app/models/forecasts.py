@@ -148,6 +148,88 @@ class SupplyRecommendation(Base):
 
 
 # ──────────────────────────────────────────────
+# Sales Forecast (Planning Spreadsheet)
+# ──────────────────────────────────────────────
+
+class SalesForecast(Base):
+    """
+    Stores the Sales Forecast planning grid data.
+    Each row represents a SKU × Channel × Region forecast for a given year.
+    """
+    __tablename__ = "sales_forecast"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    year = Column(Integer, nullable=False, index=True)
+    brand = Column(String(100), nullable=False, default="")
+    product_group = Column(String(200), nullable=False, default="")
+    sku_code = Column(String(50), nullable=False, index=True)
+    sku_name = Column(String(500), nullable=False, default="")
+    unit = Column(String(20), nullable=False, default="PCS")
+    channel = Column(String(100), nullable=False, default="")
+    region = Column(String(100), nullable=False, default="")
+    jan = Column(Float, nullable=False, default=0)
+    feb = Column(Float, nullable=False, default=0)
+    mar = Column(Float, nullable=False, default=0)
+    apr = Column(Float, nullable=False, default=0)
+    may = Column(Float, nullable=False, default=0)
+    jun = Column(Float, nullable=False, default=0)
+    jul = Column(Float, nullable=False, default=0)
+    aug = Column(Float, nullable=False, default=0)
+    sep = Column(Float, nullable=False, default=0)
+    oct = Column(Float, nullable=False, default=0)
+    nov = Column(Float, nullable=False, default=0)
+    dec = Column(Float, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_sf_year_sku_ch_rg", "year", "sku_code", "channel", "region", unique=True),
+        Index("ix_sf_brand", "brand"),
+    )
+
+
+# ──────────────────────────────────────────────
+# Sales Entry (Actual Sales Planning Grid)
+# ──────────────────────────────────────────────
+
+class SalesEntry(Base):
+    """
+    Stores the Actual Sales planning grid data.
+    Each row represents a SKU × Channel × Region actual sales for a given year.
+    """
+    __tablename__ = "sales_entry"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    year = Column(Integer, nullable=False, index=True)
+    brand = Column(String(100), nullable=False, default="")
+    product_group = Column(String(200), nullable=False, default="")
+    sku_code = Column(String(50), nullable=False, index=True)
+    sku_name = Column(String(500), nullable=False, default="")
+    unit = Column(String(20), nullable=False, default="PCS")
+    channel = Column(String(100), nullable=False, default="")
+    region = Column(String(100), nullable=False, default="")
+    jan = Column(Float, nullable=False, default=0)
+    feb = Column(Float, nullable=False, default=0)
+    mar = Column(Float, nullable=False, default=0)
+    apr = Column(Float, nullable=False, default=0)
+    may = Column(Float, nullable=False, default=0)
+    jun = Column(Float, nullable=False, default=0)
+    jul = Column(Float, nullable=False, default=0)
+    aug = Column(Float, nullable=False, default=0)
+    sep = Column(Float, nullable=False, default=0)
+    oct = Column(Float, nullable=False, default=0)
+    nov = Column(Float, nullable=False, default=0)
+    dec = Column(Float, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_se_year_sku_ch_rg", "year", "sku_code", "channel", "region", unique=True),
+        Index("ix_se_brand", "brand"),
+    )
+
+
+# ──────────────────────────────────────────────
 # User & Auth
 # ──────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 """
 Pydantic schemas for API request/response validation.
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import datetime, date
 from enum import Enum
@@ -395,7 +395,19 @@ class PurchaseOrderBase(BaseModel):
     source: str = "Manual"
 
 class PurchaseOrderCreate(PurchaseOrderBase):
-    pass
+    @field_validator('quantity')
+    @classmethod
+    def quantity_must_be_positive(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError('Quantity must be greater than 0')
+        return v
+
+    @field_validator('unit_price')
+    @classmethod
+    def unit_price_non_negative(cls, v):
+        if v is not None and v < 0:
+            raise ValueError('Unit price must not be negative')
+        return v
 
 class PurchaseOrderResponse(PurchaseOrderBase):
     id: int
@@ -421,7 +433,12 @@ class ProductionOrderBase(BaseModel):
     source: str = "Manual"
 
 class ProductionOrderCreate(ProductionOrderBase):
-    pass
+    @field_validator('quantity')
+    @classmethod
+    def quantity_must_be_positive(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError('Quantity must be greater than 0')
+        return v
 
 class ProductionOrderResponse(ProductionOrderBase):
     id: int
@@ -596,6 +613,80 @@ class ForecastAuditLogResponse(BaseModel):
     adjusted_by: str
     adjustment_reason: Optional[str]
     created_at: datetime
+    class Config:
+        from_attributes = True
+
+
+
+# ──────────────────────────────────────────────
+# Sales Forecast (Planning Spreadsheet)
+# ──────────────────────────────────────────────
+
+class SalesForecastBase(BaseModel):
+    year: int
+    brand: str = Field("", max_length=100)
+    product_group: str = Field("", max_length=200)
+    sku_code: str = Field(..., max_length=50)
+    sku_name: str = Field("", max_length=500)
+    unit: str = Field("PCS", max_length=20)
+    channel: str = Field("", max_length=100)
+    region: str = Field("", max_length=100)
+    jan: float = 0
+    feb: float = 0
+    mar: float = 0
+    apr: float = 0
+    may: float = 0
+    jun: float = 0
+    jul: float = 0
+    aug: float = 0
+    sep: float = 0
+    oct: float = 0
+    nov: float = 0
+    dec: float = 0
+
+class SalesForecastCreate(SalesForecastBase):
+    pass
+
+class SalesForecastUpdate(BaseModel):
+    brand: Optional[str] = None
+    product_group: Optional[str] = None
+    sku_name: Optional[str] = None
+    unit: Optional[str] = None
+    channel: Optional[str] = None
+    region: Optional[str] = None
+    jan: Optional[float] = None
+    feb: Optional[float] = None
+    mar: Optional[float] = None
+    apr: Optional[float] = None
+    may: Optional[float] = None
+    jun: Optional[float] = None
+    jul: Optional[float] = None
+    aug: Optional[float] = None
+    sep: Optional[float] = None
+    oct: Optional[float] = None
+    nov: Optional[float] = None
+    dec: Optional[float] = None
+
+class SalesForecastResponse(SalesForecastBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+
+# ──────────────────────────────────────────────
+# Sales Entry (Actual Sales Planning Grid)
+# ──────────────────────────────────────────────
+
+# Reuse the same field structure as SalesForecast
+SalesEntryCreate = SalesForecastCreate
+SalesEntryUpdate = SalesForecastUpdate
+
+class SalesEntryResponse(SalesForecastBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
     class Config:
         from_attributes = True
 

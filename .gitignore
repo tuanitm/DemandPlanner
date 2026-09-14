@@ -23,6 +23,9 @@ build/
 .env.local
 .env.*.local
 
+# Batch file
+.bat
+
 # Native binaries, Python compiled libs
 *.pyd
 *.dll

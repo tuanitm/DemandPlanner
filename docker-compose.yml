@@ -24,8 +24,8 @@ services:
       - shared-network
       - default
     environment:
-      DATABASE_URL: postgresql+asyncpg://dpuser:dppass2024@postgres:5432/demandplanner
-      DATABASE_URL_SYNC: postgresql://dpuser:dppass2024@postgres:5432/demandplanner
+      DATABASE_URL: mysql+aiomysql://planner:planner%402026@192.168.30.91:3386/demandplanner
+      DATABASE_URL_SYNC: mysql+pymysql://planner:planner%402026@192.168.30.91:3386/demandplanner
       REDIS_URL: redis://dp-redis:6379/0
       SECRET_KEY: demand-planner-secret-key-change-in-production
       ENVIRONMENT: development
@@ -34,8 +34,6 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -49,15 +47,13 @@ services:
       - shared-network
       - default
     environment:
-      DATABASE_URL: postgresql+asyncpg://dpuser:dppass2024@postgres:5432/demandplanner
-      DATABASE_URL_SYNC: postgresql://dpuser:dppass2024@postgres:5432/demandplanner
+      DATABASE_URL: mysql+aiomysql://planner:planner%402026@192.168.30.91:3386/demandplanner
+      DATABASE_URL_SYNC: mysql+pymysql://planner:planner%402026@192.168.30.91:3386/demandplanner
       REDIS_URL: redis://dp-redis:6379/0
       SECRET_KEY: demand-planner-secret-key-change-in-production
     volumes:
       - ./backend:/app
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     command: celery -A app.celery_app worker --loglevel=info --pool=solo
@@ -80,9 +76,6 @@ services:
     depends_on:
       - backend
     command: npm run dev
-
-volumes:
-  pg_data:
 
 networks:
   shared-network:

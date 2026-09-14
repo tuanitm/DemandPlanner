@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { TrendingUp, Download, Search, Upload, Save, FileSpreadsheet, X } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
-import { masterDataApi, transactionApi } from '@/lib/api';
+import { masterDataApi, transactionApi, salesEntryApi, SalesEntryRow, SalesEntryCreateRow } from '@/lib/api';
 
 interface HierarchyData {
   item_group_code: string;
@@ -93,6 +93,7 @@ export default function SalesEntryPage() {
   const [editValue, setEditValue] = useState('');
   const [hasUnsaved, setHasUnsaved] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Master data from API
@@ -100,29 +101,48 @@ export default function SalesEntryPage() {
   const [allWarehouses, setAllWarehouses] = useState<WarehouseData[]>([]);
   const [allItems, setAllItems] = useState<ItemData[]>([]);
 
-  // ── localStorage helpers ──
-  const storageKey = `sales_${yearFilter}`;
-  const saveToStorage = useCallback((data: SalesRow[]) => {
-    try { localStorage.setItem(storageKey, JSON.stringify(data)); } catch {}
-  }, [storageKey]);
-  const loadFromStorage = useCallback((): SalesRow[] | null => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return null;
-  }, [storageKey]);
+  // ── Helper: convert backend snake_case row to frontend camelCase ──
+  const toFrontendRow = (r: SalesEntryRow): SalesRow => ({
+    id: r.id, year: r.year, brand: r.brand, productGroup: r.product_group,
+    skuCode: r.sku_code, skuName: r.sku_name, unit: r.unit,
+    channel: r.channel, region: r.region,
+    jan: r.jan, feb: r.feb, mar: r.mar, apr: r.apr, may: r.may, jun: r.jun,
+    jul: r.jul, aug: r.aug, sep: r.sep, oct: r.oct, nov: r.nov, dec: r.dec,
+  });
 
-  // ── Load saved sales data when year changes ──
+  // ── Helper: convert frontend camelCase row to backend create payload ──
+  const toBackendRow = (r: SalesRow): SalesEntryCreateRow => ({
+    year: r.year, brand: r.brand, product_group: r.productGroup,
+    sku_code: r.skuCode, sku_name: r.skuName, unit: r.unit,
+    channel: r.channel, region: r.region,
+    jan: r.jan, feb: r.feb, mar: r.mar, apr: r.apr, may: r.may, jun: r.jun,
+    jul: r.jul, aug: r.aug, sep: r.sep, oct: r.oct, nov: r.nov, dec: r.dec,
+  });
+
+  // ── Load sales entry data from API when year changes ──
   useEffect(() => {
-    const saved = loadFromStorage();
-    if (saved && saved.length > 0) {
-      setSalesData(saved);
-      setHasUnsaved(false);
-    } else {
-      setSalesData([]);
-    }
-  }, [yearFilter, loadFromStorage]);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        let allRows: SalesRow[] = [];
+        let page = 1;
+        while (true) {
+          const res = await salesEntryApi.list({ year: yearFilter, page, page_size: 500 });
+          allRows = [...allRows, ...(res.items as unknown as SalesEntryRow[]).map(toFrontendRow)];
+          if (allRows.length >= res.total || res.items.length === 0) break;
+          page++;
+        }
+        setSalesData(allRows);
+        setHasUnsaved(false);
+      } catch (e) {
+        console.error('Failed to load sales entry data:', e);
+        setSalesData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [yearFilter]);
 
   // ── Fetch all master data on mount ──
   useEffect(() => {
@@ -203,7 +223,7 @@ export default function SalesEntryPage() {
     return MONTH_KEYS.filter((_, i) => selectedIndexes.includes(i));
   }, [monthFilter]);
 
-  // ── Load from API ──
+  // ── Load from Actual Sales API (transaction data) and save to sales_entry ──
   const handleLoadFromDB = useCallback(async () => {
     setLoading(true);
     try {
@@ -256,15 +276,30 @@ export default function SalesEntryPage() {
       }
 
       const rows = Array.from(pivotMap.values());
-      setSalesData(rows);
-      saveToStorage(rows);
+
+      // Save to database via bulk upsert
+      if (rows.length > 0) {
+        await salesEntryApi.bulkUpsert(rows.map(toBackendRow));
+        // Reload from DB to get proper IDs
+        let allRows: SalesRow[] = [];
+        let pg = 1;
+        while (true) {
+          const res = await salesEntryApi.list({ year: yearFilter, page: pg, page_size: 500 });
+          allRows = [...allRows, ...(res.items as unknown as SalesEntryRow[]).map(toFrontendRow)];
+          if (allRows.length >= res.total || res.items.length === 0) break;
+          pg++;
+        }
+        setSalesData(allRows);
+      } else {
+        setSalesData([]);
+      }
       setHasUnsaved(false);
     } catch (e) {
       console.error('Failed to load sales data:', e);
     } finally {
       setLoading(false);
     }
-  }, [yearFilter, saveToStorage]);
+  }, [yearFilter]);
 
   // Filter displayed data by search text and filters
   const displayedData = useMemo(() => {
@@ -329,7 +364,7 @@ export default function SalesEntryPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
@@ -447,9 +482,28 @@ export default function SalesEntryPage() {
         // Reassign IDs to be sequential
         const finalRows = Array.from(mergedMap.values()).map((r, i) => ({ ...r, id: i + 1 }));
 
-        setSalesData(finalRows);
-        saveToStorage(finalRows);
-        setHasUnsaved(false);
+        // Save to database via bulk upsert
+        setSaving(true);
+        try {
+          await salesEntryApi.bulkUpsert(finalRows.map(toBackendRow));
+          // Reload from DB to get proper IDs
+          let allRows: SalesRow[] = [];
+          let page = 1;
+          while (true) {
+            const res = await salesEntryApi.list({ year: yearFilter, page, page_size: 500 });
+            allRows = [...allRows, ...(res.items as unknown as SalesEntryRow[]).map(toFrontendRow)];
+            if (allRows.length >= res.total || res.items.length === 0) break;
+            page++;
+          }
+          setSalesData(allRows);
+          setHasUnsaved(false);
+        } catch (err) {
+          alert('Failed to save imported data to database.');
+          setSalesData(finalRows);
+          setHasUnsaved(true);
+        } finally {
+          setSaving(false);
+        }
       } catch (err) {
         alert('Failed to parse Excel file. Please check the format.');
       }
@@ -458,7 +512,7 @@ export default function SalesEntryPage() {
     // Reset input so the same file can be re-selected
     e.target.value = '';
     setShowImportModal(false);
-  }, [yearFilter, saveToStorage, salesData, allItems, hierarchy, CHANNELS, regions]);
+  }, [yearFilter, salesData, allItems, hierarchy, CHANNELS, regions]);
 
   // ── Download Excel template ──
   const handleDownloadTemplate = useCallback(() => {
@@ -697,12 +751,18 @@ export default function SalesEntryPage() {
                           autoFocus
                           value={editValue}
                           onChange={e => setEditValue(e.target.value)}
-                          onBlur={() => {
+                          onBlur={async () => {
                             const v = parseFloat(editValue);
                             if (!isNaN(v) && v >= 0) {
-                              const updated = salesData.map(row => row.id === r.id ? { ...row, [m]: Math.round(v) } : row);
+                              const rounded = Math.round(v);
+                              const updated = salesData.map(row => row.id === r.id ? { ...row, [m]: rounded } : row);
                               setSalesData(updated);
-                              setHasUnsaved(true);
+                              // Save cell change to database
+                              try {
+                                await salesEntryApi.update(r.id, { [m]: rounded });
+                              } catch {
+                                setHasUnsaved(true);
+                              }
                             }
                             setEditingCell(null);
                           }}
@@ -739,13 +799,34 @@ export default function SalesEntryPage() {
           <span>Showing {displayedData.length} of {salesData.length} records</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
             {hasUnsaved && <span className="badge badge-warning" style={{ padding: '4px 10px' }}>Unsaved changes</span>}
+            {saving && <span className="badge badge-info" style={{ padding: '4px 10px' }}>Saving...</span>}
             <button
               className="btn btn-primary btn-sm"
-              onClick={() => { saveToStorage(salesData); setHasUnsaved(false); }}
-              disabled={!hasUnsaved}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  await salesEntryApi.bulkUpsert(salesData.map(toBackendRow));
+                  // Reload from DB to get proper IDs
+                  let allRows: SalesRow[] = [];
+                  let page = 1;
+                  while (true) {
+                    const res = await salesEntryApi.list({ year: yearFilter, page, page_size: 500 });
+                    allRows = [...allRows, ...(res.items as unknown as SalesEntryRow[]).map(toFrontendRow)];
+                    if (allRows.length >= res.total || res.items.length === 0) break;
+                    page++;
+                  }
+                  setSalesData(allRows);
+                  setHasUnsaved(false);
+                } catch (e) {
+                  alert('Failed to save. Please try again.');
+                } finally {
+                  setSaving(false);
+                }
+              }}
+              disabled={!hasUnsaved || saving}
               style={{ opacity: hasUnsaved ? 1 : 0.5 }}
             >
-              <Save size={14} /> Save
+              <Save size={14} /> {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
         </div>

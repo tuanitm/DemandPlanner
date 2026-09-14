@@ -16,7 +16,7 @@ export default function HomePage() {
 
       // Auto-login with default admin credentials for seamless dev experience
       try {
-        const API_BASE = typeof window !== 'undefined' && (!process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL.includes('localhost')) ? `${window.location.protocol}//${window.location.hostname}:8000` : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000');
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/';
         const res = await fetch(`${API_BASE}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -180,16 +180,54 @@ async def list_forecast_accuracy(
 
 @router.get("/accuracy/summary")
 async def accuracy_summary(
+    year: Optional[int] = None,
+    month: Optional[List[int]] = Query(None),
+    brand: Optional[List[str]] = Query(None),
+    product_group: Optional[List[str]] = Query(None),
+    search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Aggregated accuracy KPIs per SKU (averaged across warehouses and months)."""
+    """Aggregated accuracy KPIs per SKU with item details from master data."""
+    from app.models.master_data import Item, ProductHierarchy
+
     q = select(
         ForecastAccuracy.item_code,
         func.avg(ForecastAccuracy.fa_percent).label("avg_fa"),
+        func.sum(ForecastAccuracy.forecast_qty).label("total_forecast"),
         func.sum(ForecastAccuracy.actual_qty).label("total_actual"),
         func.count().label("periods"),
-    ).group_by(ForecastAccuracy.item_code)
+        Item.item_name,
+        Item.uom,
+        ProductHierarchy.brand,
+        ProductHierarchy.item_group_name,
+    ).outerjoin(
+        Item, ForecastAccuracy.item_code == Item.item_code
+    ).outerjoin(
+        ProductHierarchy, Item.item_group_code == ProductHierarchy.item_group_code
+    )
+
+    if year:
+        q = q.where(ForecastAccuracy.year == year)
+    if month:
+        q = q.where(ForecastAccuracy.month.in_(month))
+    if brand:
+        q = q.where(ProductHierarchy.brand.in_(brand))
+    if product_group:
+        q = q.where(ProductHierarchy.item_group_name.in_(product_group))
+    if search:
+        q = q.where(
+            ForecastAccuracy.item_code.contains(search)
+            | Item.item_name.contains(search)
+        )
+
+    q = q.group_by(
+        ForecastAccuracy.item_code,
+        Item.item_name,
+        Item.uom,
+        ProductHierarchy.brand,
+        ProductHierarchy.item_group_name,
+    )
 
     result = await db.execute(q)
     rows = result.all()
@@ -197,12 +235,20 @@ async def accuracy_summary(
     items = []
     for r in rows:
         fa = round(float(r.avg_fa), 1)
-        revenue = round(float(r.total_actual) * 50000 / 1_000_000, 0)  # Rough VND estimate
+        forecast_qty = round(float(r.total_forecast or 0))
+        actual_qty = round(float(r.total_actual or 0))
+        variance = actual_qty - forecast_qty
         zone = "critical" if fa < 50 else "watch" if fa < 70 else "good"
         items.append({
             "item_code": r.item_code,
+            "item_name": r.item_name or r.item_code,
+            "brand": r.brand or "",
+            "product_group": r.item_group_name or "",
+            "uom": r.uom or "PCS",
             "fa_percent": fa,
-            "revenue_m": revenue,
+            "forecast_qty": forecast_qty,
+            "actual_qty": actual_qty,
+            "variance": variance,
             "zone": zone,
             "periods": r.periods,
         })

@@ -1,8 +1,8 @@
 /**
  * API client library for frontend-backend communication.
- */
+*/
 
-const API_BASE = typeof window !== 'undefined' && (!process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL.includes('localhost')) ? `${window.location.protocol}//${window.location.hostname}:8000` : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000');
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/';
 
 interface RequestOptions {
   method?: string;
@@ -574,14 +574,22 @@ export interface ForecastGenerateResponse {
   message?: string;
 }
 
+export interface AccuracySummaryItem {
+  item_code: string;
+  item_name: string;
+  brand: string;
+  product_group: string;
+  uom: string;
+  fa_percent: number;
+  forecast_qty: number;
+  actual_qty: number;
+  variance: number;
+  zone: string;
+  periods: number;
+}
+
 export interface AccuracySummary {
-  items: Array<{
-    item_code: string;
-    fa_percent: number;
-    revenue_m: number;
-    zone: string;
-    periods: number;
-  }>;
+  items: AccuracySummaryItem[];
   overall_fa: number;
   total_skus: number;
   critical_count: number;
@@ -659,8 +667,8 @@ export const forecastApi = {
   accuracy: (params: { page?: number; page_size?: number; item_code?: string; warehouse_code?: string } = {}) =>
     api.get<PaginatedResponse<unknown>>(`/api/forecast/accuracy${buildQuery(params)}`),
 
-  accuracySummary: () =>
-    api.get<AccuracySummary>('/api/forecast/accuracy/summary'),
+  accuracySummary: (params: { year?: number; month?: number[]; brand?: string[]; product_group?: string[]; search?: string } = {}) =>
+    api.get<AccuracySummary>(`/api/forecast/accuracy/summary${buildQuery(params)}`),
 
   monthly: (year?: number) =>
     api.get<MonthlyComparison>(`/api/forecast/monthly${year ? `?year=${year}` : ''}`),
@@ -804,4 +812,97 @@ export interface WorkflowResponse {
 
 export const sapApi = {
   syncAll: () => api.post<{ message: string; details?: any }>('/api/sap/sync-all', {}),
+};
+
+
+// ──────────────────────────────────────────────
+// Sales Forecast (Planning Spreadsheet) Types & API
+// ──────────────────────────────────────────────
+
+export interface SalesForecastRow {
+  id: number;
+  year: number;
+  brand: string;
+  product_group: string;
+  sku_code: string;
+  sku_name: string;
+  unit: string;
+  channel: string;
+  region: string;
+  jan: number;
+  feb: number;
+  mar: number;
+  apr: number;
+  may: number;
+  jun: number;
+  jul: number;
+  aug: number;
+  sep: number;
+  oct: number;
+  nov: number;
+  dec: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SalesForecastCreateRow {
+  year: number;
+  brand: string;
+  product_group: string;
+  sku_code: string;
+  sku_name: string;
+  unit: string;
+  channel: string;
+  region: string;
+  jan: number;
+  feb: number;
+  mar: number;
+  apr: number;
+  may: number;
+  jun: number;
+  jul: number;
+  aug: number;
+  sep: number;
+  oct: number;
+  nov: number;
+  dec: number;
+}
+
+export interface BulkUpsertResponse {
+  message: string;
+  inserted: number;
+  updated: number;
+  total: number;
+}
+
+export const salesForecastApi = {
+  list: (params: { page?: number; page_size?: number; year?: number; brand?: string[]; channel?: string[]; region?: string[]; product_group?: string[]; search?: string } = {}) =>
+    api.get<PaginatedResponse<SalesForecastRow>>(`/api/sales-forecast${buildQuery(params)}`),
+
+  bulkUpsert: (rows: SalesForecastCreateRow[]) =>
+    api.post<BulkUpsertResponse>('/api/sales-forecast/bulk', rows),
+
+  update: (id: number, data: Partial<SalesForecastCreateRow>) =>
+    api.put<SalesForecastRow>(`/api/sales-forecast/${id}`, data),
+
+  deleteByYear: (year: number, params: { brand?: string[]; channel?: string[]; region?: string[] } = {}) =>
+    api.delete<{ message: string; deleted: number }>(`/api/sales-forecast${buildQuery({ year, ...params })}`),
+};
+
+// SalesEntry reuses the same row types as SalesForecast (identical structure)
+export type SalesEntryRow = SalesForecastRow;
+export type SalesEntryCreateRow = SalesForecastCreateRow;
+
+export const salesEntryApi = {
+  list: (params: { page?: number; page_size?: number; year?: number; brand?: string[]; channel?: string[]; region?: string[]; product_group?: string[]; search?: string } = {}) =>
+    api.get<PaginatedResponse<SalesEntryRow>>(`/api/sales-entry${buildQuery(params)}`),
+
+  bulkUpsert: (rows: SalesEntryCreateRow[]) =>
+    api.post<BulkUpsertResponse>('/api/sales-entry/bulk', rows),
+
+  update: (id: number, data: Partial<SalesEntryCreateRow>) =>
+    api.put<SalesEntryRow>(`/api/sales-entry/${id}`, data),
+
+  deleteByYear: (year: number, params: { brand?: string[]; channel?: string[]; region?: string[] } = {}) =>
+    api.delete<{ message: string; deleted: number }>(`/api/sales-entry${buildQuery({ year, ...params })}`),
 };

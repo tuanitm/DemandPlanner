@@ -12,8 +12,7 @@ const AuthContext = createContext<AuthContextType>({ token: null, ready: false }
 export function useAuth() {
   return useContext(AuthContext);
 }
-
-const API_BASE = typeof window !== 'undefined' && (!process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL.includes('localhost')) ? `${window.location.protocol}//${window.location.hostname}:8000` : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000');
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/';
 
 async function loginAsAdmin(): Promise<string | null> {
   try {

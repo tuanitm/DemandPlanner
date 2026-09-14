@@ -1,35 +1,13 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { masterDataApi, ProductHierarchy } from '@/lib/api';
+import { forecastApi, AccuracySummaryItem, masterDataApi, ProductHierarchy } from '@/lib/api';
 import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, ReferenceArea
 } from 'recharts';
-import { AlertTriangle, Search, Download } from 'lucide-react';
+import { AlertTriangle, Search, Download, Loader2 } from 'lucide-react';
 import XLSX from 'xlsx-js-style';
-
-const accuracyData = [
-  { name: 'SKU-001', skuName: 'Premium Rice 5kg', brandName: 'Golden Harvest', productGroup: 'Rice & Grains', forecastQty: 15200, actualQty: 14000, zone: 'good' },
-  { name: 'SKU-034', skuName: 'Jasmine Tea 500ml', brandName: 'VietTea', productGroup: 'Beverages', forecastQty: 12400, actualQty: 10900, zone: 'good' },
-  { name: 'SKU-012', skuName: 'Instant Noodle Beef', brandName: 'Hao Hao', productGroup: 'Instant Noodles', forecastQty: 18500, actualQty: 10200, zone: 'critical' },
-  { name: 'SKU-078', skuName: 'Coconut Milk 1L', brandName: 'VietCoco', productGroup: 'Beverages', forecastQty: 6800, actualQty: 4900, zone: 'watch' },
-  { name: 'SKU-055', skuName: 'Fish Sauce 750ml', brandName: 'Phu Quoc', productGroup: 'Condiments', forecastQty: 14000, actualQty: 4900, zone: 'critical' },
-  { name: 'SKU-089', skuName: 'Green Bean Cake', brandName: 'Bao Minh', productGroup: 'Snacks & Cakes', forecastQty: 3200, actualQty: 3040, zone: 'good' },
-  { name: 'SKU-023', skuName: 'Soy Milk Original', brandName: 'Fami', productGroup: 'Beverages', forecastQty: 9500, actualQty: 5700, zone: 'watch' },
-  { name: 'SKU-067', skuName: 'Chili Paste 500g', brandName: 'Cholimex', productGroup: 'Condiments', forecastQty: 8500, actualQty: 2400, zone: 'critical' },
-  { name: 'SKU-045', skuName: 'Dried Shrimp 200g', brandName: 'Phu Quoc', productGroup: 'Seafood', forecastQty: 4200, actualQty: 3570, zone: 'good' },
-  { name: 'SKU-091', skuName: 'Pho Broth Concentrate', brandName: 'ViFon', productGroup: 'Instant Noodles', forecastQty: 7200, actualQty: 5600, zone: 'watch' },
-  { name: 'SKU-102', skuName: 'Condensed Milk 380g', brandName: 'Vinamilk', productGroup: 'Dairy', forecastQty: 16000, actualQty: 8800, zone: 'critical' },
-  { name: 'SKU-118', skuName: 'Rice Paper Rolls', brandName: 'Bao Minh', productGroup: 'Snacks & Cakes', forecastQty: 2800, actualQty: 2520, zone: 'good' },
-  { name: 'SKU-133', skuName: 'Tapioca Starch 1kg', brandName: 'Golden Harvest', productGroup: 'Rice & Grains', forecastQty: 5000, actualQty: 2900, zone: 'watch' },
-  { name: 'SKU-145', skuName: 'Spring Roll Wrapper', brandName: 'Safoco', productGroup: 'Snacks & Cakes', forecastQty: 11000, actualQty: 7500, zone: 'watch' },
-  { name: 'SKU-156', skuName: 'Lemongrass Extract', brandName: 'Cholimex', productGroup: 'Condiments', forecastQty: 8000, actualQty: 6560, zone: 'good' },
-].map(d => ({
-  ...d,
-  fa: d.forecastQty > 0 ? Math.round(Math.max(0, 100 - (Math.abs(d.forecastQty - d.actualQty) / d.forecastQty) * 100)) : 0,
-  variance: d.actualQty - d.forecastQty,
-}));
 
 const tooltipStyle = {
   backgroundColor: '#1e293b',
@@ -39,35 +17,23 @@ const tooltipStyle = {
   color: '#f1f5f9',
 };
 
-interface ScatterPayload {
-  name: string;
-  skuName: string;
-  brandName: string;
-  productGroup: string;
-  forecastQty: number;
-  actualQty: number;
-  fa: number;
-  variance: number;
-  zone: string;
-}
-
-const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: ScatterPayload }> }) => {
+const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: AccuracySummaryItem }> }) => {
   if (active && payload && payload.length) {
     const d = payload[0].payload;
     return (
       <div style={{ ...tooltipStyle, padding: '12px' }}>
-        <div>SKU Code: <strong>{d.name}</strong></div>
-        <div>SKU Name: <strong>{d.skuName}</strong></div>
-        <div>Forecast Qty: <strong>{d.forecastQty.toLocaleString()}</strong></div>
-        <div>Actual Qty: <strong>{d.actualQty.toLocaleString()}</strong></div>
-        <div>FA%: <strong>{d.fa}%</strong></div>
+        <div>SKU Code: <strong>{d.item_code}</strong></div>
+        <div>SKU Name: <strong>{d.item_name}</strong></div>
+        <div>Brand: <strong>{d.brand}</strong></div>
+        <div>Product Group: <strong>{d.product_group}</strong></div>
+        <div>Forecast Qty: <strong>{d.forecast_qty.toLocaleString()}</strong></div>
+        <div>Actual Qty: <strong>{d.actual_qty.toLocaleString()}</strong></div>
+        <div>FA%: <strong>{d.fa_percent}%</strong></div>
       </div>
     );
   }
   return null;
 };
-
-
 
 const filterInputStyle: React.CSSProperties = {
   padding: '8px 12px 8px 36px',
@@ -94,6 +60,11 @@ export default function ForecastAccuracyPage() {
   const [showBrandDropdown, setShowBrandDropdown] = useState(false);
   const [showGroupDropdown, setShowGroupDropdown] = useState(false);
 
+  // API data
+  const [accuracyData, setAccuracyData] = useState<AccuracySummaryItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [overallFa, setOverallFa] = useState(0);
+
   const closeAllDd = () => { setShowMonthDropdown(false); setShowBrandDropdown(false); setShowGroupDropdown(false); };
 
   // Fetch product hierarchy from master data on mount
@@ -114,42 +85,49 @@ export default function ForecastAccuracyPage() {
     fetchAll();
   }, []);
 
-  // Derive dynamic accuracy data based on year and month filters
-  const dynamicAccuracyData = useMemo(() => {
-    const yearMult = yearFilter === CURRENT_YEAR ? 1 : yearFilter === CURRENT_YEAR - 1 ? 0.85 : 0.7;
-    const monthMult = monthFilter.length > 0 ? (monthFilter.length / 12) : 1;
-    const monthHash = monthFilter.reduce((acc, m) => acc + m.charCodeAt(0), 0) || 1;
+  // Fetch accuracy data from API when filters change
+  useEffect(() => {
+    const fetchAccuracy = async () => {
+      setLoading(true);
+      try {
+        // Convert month names to month numbers
+        const monthNumbers = monthFilter.length > 0
+          ? monthFilter.map(m => ALL_MONTHS.indexOf(m) + 1)
+          : undefined;
 
-    return accuracyData.map(d => {
-      const seed = (d.name.charCodeAt(d.name.length - 1) + monthHash) % 100 / 100;
-      const newForecast = Math.round(d.forecastQty * yearMult * monthMult * (0.8 + seed * 0.4));
-      const newActual = Math.round(d.actualQty * yearMult * monthMult * (0.8 + seed * 0.5));
-      const fa = newForecast > 0 ? Math.round(Math.max(0, 100 - (Math.abs(newForecast - newActual) / newForecast) * 100)) : 0;
-      const zone = fa >= 70 ? 'good' : fa >= 50 ? 'watch' : 'critical';
+        const res = await forecastApi.accuracySummary({
+          year: yearFilter,
+          month: monthNumbers,
+          brand: brandFilter.length > 0 ? brandFilter : undefined,
+          product_group: productGroupFilter.length > 0 ? productGroupFilter : undefined,
+          search: skuSearch || undefined,
+        });
 
-      return {
-        ...d,
-        forecastQty: newForecast,
-        actualQty: newActual,
-        fa,
-        zone,
-        variance: newActual - newForecast,
-      };
-    });
-  }, [yearFilter, monthFilter]);
+        setAccuracyData(res.items);
+        setOverallFa(res.overall_fa);
+      } catch (e) {
+        console.error('Failed to load accuracy data:', e);
+        setAccuracyData([]);
+        setOverallFa(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAccuracy();
+  }, [yearFilter, monthFilter, brandFilter, productGroupFilter, skuSearch]);
 
-  // Derive brands from the dynamic data
-  const brands = useMemo(() => {
-    return [...new Set(dynamicAccuracyData.map(d => d.brandName))].sort();
-  }, [dynamicAccuracyData]);
+  // Derive brands from hierarchy
+  const brands = useMemo(() =>
+    [...new Set(hierarchy.map(h => h.brand))].filter(Boolean).sort(),
+  [hierarchy]);
 
   // Filter product groups based on selected brand
   const productGroups = useMemo(() => {
     const source = brandFilter.length > 0
-      ? dynamicAccuracyData.filter(d => brandFilter.includes(d.brandName))
-      : dynamicAccuracyData;
-    return [...new Set(source.map(d => d.productGroup))].sort();
-  }, [brandFilter, dynamicAccuracyData]);
+      ? hierarchy.filter(h => brandFilter.includes(h.brand))
+      : hierarchy;
+    return [...new Set(source.map(h => h.item_group_name))].filter(Boolean).sort();
+  }, [brandFilter, hierarchy]);
 
   // Reset product group filter when brand changes and the selected groups are no longer valid
   useEffect(() => {
@@ -161,33 +139,26 @@ export default function ForecastAccuracyPage() {
     }
   }, [productGroups, productGroupFilter]);
 
-  const filteredData = useMemo(() => {
-    return dynamicAccuracyData.filter(item => {
-      if (brandFilter.length > 0 && !brandFilter.includes(item.brandName)) return false;
-      if (productGroupFilter.length > 0 && !productGroupFilter.includes(item.productGroup)) return false;
-      if (skuSearch) {
-        const q = skuSearch.toLowerCase();
-        if (!item.name.toLowerCase().includes(q) && !item.skuName.toLowerCase().includes(q)) return false;
-      }
-      return true;
-    });
-  }, [brandFilter, productGroupFilter, skuSearch, dynamicAccuracyData]);
+  // The API already handles filtering, so filteredData = accuracyData
+  const filteredData = accuracyData;
 
-  const volThreshold = Math.round(5000 * (monthFilter.length > 0 ? (monthFilter.length / 12) : 1) * (yearFilter === CURRENT_YEAR ? 1 : yearFilter === CURRENT_YEAR - 1 ? 0.85 : 0.7));
-  const maxVol = filteredData.length > 0 ? Math.max(...filteredData.map(d => d.forecastQty)) * 1.2 : 20000;
-  const criticalItems = filteredData.filter(d => d.fa < 50 && d.forecastQty > volThreshold);
+  const volThreshold = filteredData.length > 0
+    ? Math.round(filteredData.reduce((sum, d) => sum + d.forecast_qty, 0) / filteredData.length * 0.5)
+    : 5000;
+  const maxVol = filteredData.length > 0 ? Math.max(...filteredData.map(d => d.forecast_qty)) * 1.2 : 20000;
+  const criticalItems = filteredData.filter(d => d.fa_percent < 50 && d.forecast_qty > volThreshold);
 
   const handleExportExcel = useCallback(() => {
-    const sortedData = [...filteredData].sort((a, b) => a.fa - b.fa);
+    const sortedData = [...filteredData].sort((a, b) => a.fa_percent - b.fa_percent);
     const exportRows = sortedData.map(item => ({
-        'SKU Code': item.name,
-        'SKU Name': item.skuName,
-        'Brand Name': item.brandName,
-        'Product Group': item.productGroup,
-        'Forecast Qty': item.forecastQty,
-        'Actual Qty': item.actualQty,
+        'SKU Code': item.item_code,
+        'SKU Name': item.item_name,
+        'Brand': item.brand,
+        'Product Group': item.product_group,
+        'Forecast Qty': item.forecast_qty,
+        'Actual Qty': item.actual_qty,
         'Variance': item.variance,
-        'FA%': item.fa,
+        'FA%': item.fa_percent,
         'Priority': item.zone === 'critical' ? 'Critical' : item.zone === 'watch' ? 'Watch' : 'Good',
         'Action Needed': item.zone === 'critical' ? 'Review model & input data' : item.zone === 'watch' ? 'Monitor next cycle' : '—',
       }));
@@ -198,28 +169,26 @@ export default function ForecastAccuracyPage() {
     ];
     ws['!cols'] = colWidths;
 
-    // Apply font colors to FA% (col E) and Priority (col G) to match report display
-    const faColIdx = 7;  // Column H (0-indexed)
-    const priorityColIdx = 8;  // Column I (0-indexed)
+    // Apply font colors to FA% (col G) and Priority (col H)
+    const faColIdx = 7;
+    const priorityColIdx = 8;
     const getFAColor = (fa: number) => {
-      if (fa >= 70) return '22C55E';  // green
-      if (fa >= 50) return 'F59E0B';  // amber
-      return 'EF4444';                // red
+      if (fa >= 70) return '22C55E';
+      if (fa >= 50) return 'F59E0B';
+      return 'EF4444';
     };
     const getPriorityColor = (zone: string) => {
-      if (zone === 'critical') return 'EF4444';  // red
-      if (zone === 'watch') return 'F59E0B';      // amber
-      return '22C55E';                             // green
+      if (zone === 'critical') return 'EF4444';
+      if (zone === 'watch') return 'F59E0B';
+      return '22C55E';
     };
 
     sortedData.forEach((item, rowIdx) => {
-      const dataRow = rowIdx + 1; // +1 for header row
-      // FA% cell
+      const dataRow = rowIdx + 1;
       const faCellRef = XLSX.utils.encode_cell({ r: dataRow, c: faColIdx });
       if (ws[faCellRef]) {
-        ws[faCellRef].s = { font: { color: { rgb: getFAColor(item.fa) }, bold: true } };
+        ws[faCellRef].s = { font: { color: { rgb: getFAColor(item.fa_percent) }, bold: true } };
       }
-      // Priority cell
       const priorityCellRef = XLSX.utils.encode_cell({ r: dataRow, c: priorityColIdx });
       if (ws[priorityCellRef]) {
         ws[priorityCellRef].s = { font: { color: { rgb: getPriorityColor(item.zone) }, bold: true } };
@@ -228,15 +197,15 @@ export default function ForecastAccuracyPage() {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Forecast Accuracy');
-    XLSX.writeFile(wb, `SKU_Forecast_Accuracy_${new Date().toISOString().slice(0, 10)}.xlsx`);
-  }, [filteredData]);
+    XLSX.writeFile(wb, `SKU_Forecast_Accuracy_${yearFilter}.xlsx`);
+  }, [filteredData, yearFilter]);
 
   return (
     <div className="animate-in">
       <div className="page-header">
         <div>
           <h1 className="page-title">Forecast Accuracy Analysis</h1>
-          <p className="page-description">FA% vs Revenue scatter analysis — identify high-impact, low-accuracy SKUs</p>
+          <p className="page-description">FA% vs Forecast Qty scatter analysis — identify high-impact, low-accuracy SKUs{overallFa > 0 && ` (Overall FA: ${overallFa}%)`}</p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
@@ -330,7 +299,7 @@ export default function ForecastAccuracyPage() {
             </button>
           )}
 
-          <button id="export-excel" className="btn btn-primary" onClick={handleExportExcel}>
+          <button id="export-excel" className="btn btn-primary" onClick={handleExportExcel} disabled={filteredData.length === 0}>
             <Download size={16} /> Export Excel
           </button>
         </div>
@@ -350,102 +319,128 @@ export default function ForecastAccuracyPage() {
         </div>
       )}
 
+      {/* Loading state */}
+      {loading && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 'var(--space-8)', gap: 'var(--space-3)', color: 'var(--color-text-muted)' }}>
+          <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
+          Loading accuracy data...
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loading && filteredData.length === 0 && (
+        <div className="card" style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+          <p style={{ fontSize: 'var(--font-size-lg)', marginBottom: 'var(--space-2)' }}>No forecast accuracy data available</p>
+          <p style={{ fontSize: 'var(--font-size-sm)' }}>
+            Run forecast generation first, or check if the <code>forecast_accuracy</code> table has data for {yearFilter}.
+          </p>
+        </div>
+      )}
+
       {/* Scatter Plot */}
-      <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-        <div className="card-header">
-          <div>
-            <div className="card-title">FA% vs Forecast Qty Priority Matrix</div>
-            <div className="card-subtitle">Red zone: High Forecast Qty + Low FA% — needs immediate action</div>
+      {!loading && filteredData.length > 0 && (
+        <>
+          <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+            <div className="card-header">
+              <div>
+                <div className="card-title">FA% vs Forecast Qty Priority Matrix</div>
+                <div className="card-subtitle">Red zone: High Forecast Qty + Low FA% — needs immediate action</div>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={450}>
+              <ScatterChart margin={{ top: 20, right: 40, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis
+                  type="number" dataKey="fa_percent" name="FA%" unit="%"
+                  domain={[0, 100]}
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  label={{ value: 'Forecast Accuracy (%)', position: 'insideBottom', offset: -10, style: { fill: '#64748b', fontSize: 12 } }}
+                />
+                <YAxis
+                  type="number" dataKey="forecast_qty" name="Forecast Qty"
+                  tick={{ fontSize: 12, fill: '#94a3b8' }}
+                  tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)}
+                  label={{ value: 'Forecast Qty', angle: -90, position: 'insideLeft', style: { fill: '#64748b', fontSize: 12 } }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <ReferenceArea x1={0} x2={50} y1={volThreshold} y2={maxVol} fill="rgba(239,68,68,0.08)" />
+                <ReferenceLine x={50} stroke="rgba(239,68,68,0.4)" strokeDasharray="5 5" label={{ value: 'FA% Threshold', fill: '#ef4444', fontSize: 11 }} />
+                <ReferenceLine y={volThreshold} stroke="rgba(245,158,11,0.4)" strokeDasharray="5 5" />
+                <Scatter
+                  data={filteredData}
+                  fill="#6366f1"
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  shape={(props: any) => {
+                    const color = props.payload.zone === 'critical' ? '#ef4444' :
+                                  props.payload.zone === 'watch' ? '#f59e0b' : '#22c55e';
+                    return <circle cx={props.cx} cy={props.cy} r={8} fill={color} fillOpacity={0.8} stroke={color} strokeWidth={2} strokeOpacity={0.3} />;
+                  }}
+                />
+              </ScatterChart>
+            </ResponsiveContainer>
           </div>
-        </div>
-        <ResponsiveContainer width="100%" height={450}>
-          <ScatterChart margin={{ top: 20, right: 40, bottom: 20, left: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-            <XAxis
-              type="number" dataKey="fa" name="FA%" unit="%"
-              domain={[0, 100]}
-              tick={{ fontSize: 12, fill: '#94a3b8' }}
-              label={{ value: 'Forecast Accuracy (%)', position: 'insideBottom', offset: -10, style: { fill: '#64748b', fontSize: 12 } }}
-            />
-            <YAxis
-              type="number" dataKey="forecastQty" name="Forecast Qty"
-              tick={{ fontSize: 12, fill: '#94a3b8' }}
-              tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)}
-              label={{ value: 'Forecast Qty', angle: -90, position: 'insideLeft', style: { fill: '#64748b', fontSize: 12 } }}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <ReferenceArea x1={0} x2={50} y1={volThreshold} y2={maxVol} fill="rgba(239,68,68,0.08)" />
-            <ReferenceLine x={50} stroke="rgba(239,68,68,0.4)" strokeDasharray="5 5" label={{ value: 'FA% Threshold', fill: '#ef4444', fontSize: 11 }} />
-            <ReferenceLine y={volThreshold} stroke="rgba(245,158,11,0.4)" strokeDasharray="5 5" />
-            <Scatter
-              data={filteredData}
-              fill="#6366f1"
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              shape={(props: any) => {
-                const color = props.payload.zone === 'critical' ? '#ef4444' :
-                              props.payload.zone === 'watch' ? '#f59e0b' : '#22c55e';
-                return <circle cx={props.cx} cy={props.cy} r={8} fill={color} fillOpacity={0.8} stroke={color} strokeWidth={2} strokeOpacity={0.3} />;
-              }}
-            />
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div>
 
-      {/* Detail Table */}
-      <div className="card">
-        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="card-title">SKU Forecast Accuracy Detail</div>
-          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-            {filteredData.length} of {dynamicAccuracyData.length} SKUs
-          </span>
-        </div>
+          {/* Detail Table */}
+          <div className="card">
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="card-title">SKU Forecast Accuracy Detail</div>
+              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                {filteredData.length} SKUs
+              </span>
+            </div>
 
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>SKU Code</th>
-              <th>SKU Name</th>
-              <th>Forecast Qty</th>
-              <th>Actual Qty</th>
-              <th>Variance</th>
-              <th>FA%</th>
-              <th>Priority</th>
-              <th>Action Needed</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...filteredData]
-              .sort((a, b) => a.fa - b.fa)
-              .map((item, i) => (
-                <tr key={i}>
-                  <td>{item.name}</td>
-                  <td style={{ color: 'var(--color-text-secondary)' }}>{item.skuName}</td>
-                  <td style={{ fontWeight: 500 }}>{item.forecastQty.toLocaleString()}</td>
-                  <td>{item.actualQty.toLocaleString()}</td>
-                  <td style={{ color: item.variance >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 500 }}>
-                    {item.variance >= 0 ? '+' : ''}{item.variance.toLocaleString()}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                      <div style={{ width: 60, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-                        <div style={{ width: `${item.fa}%`, height: '100%', borderRadius: 3, background: item.fa >= 70 ? '#22c55e' : item.fa >= 50 ? '#f59e0b' : '#ef4444' }} />
-                      </div>
-                      <span style={{ fontWeight: 600 }}>{item.fa}%</span>
-                    </div>
-                  </td>
-                  <td>
-                    <span>
-                      {item.zone === 'critical' ? 'Critical' : item.zone === 'watch' ? 'Watch' : 'Good'}
-                    </span>
-                  </td>
-                  <td style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                    {item.zone === 'critical' ? 'Review model & input data' : item.zone === 'watch' ? 'Monitor next cycle' : '—'}
-                  </td>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>SKU Code</th>
+                  <th>SKU Name</th>
+                  <th>Brand</th>
+                  <th>Product Group</th>
+                  <th>Forecast Qty</th>
+                  <th>Actual Qty</th>
+                  <th>Variance</th>
+                  <th>FA%</th>
+                  <th>Priority</th>
+                  <th>Action Needed</th>
                 </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {[...filteredData]
+                  .sort((a, b) => a.fa_percent - b.fa_percent)
+                  .map((item, i) => (
+                    <tr key={i}>
+                      <td>{item.item_code}</td>
+                      <td style={{ color: 'var(--color-text-secondary)' }}>{item.item_name}</td>
+                      <td style={{ fontWeight: 500 }}>{item.brand}</td>
+                      <td>{item.product_group}</td>
+                      <td style={{ fontWeight: 500 }}>{item.forecast_qty.toLocaleString()}</td>
+                      <td>{item.actual_qty.toLocaleString()}</td>
+                      <td style={{ color: item.variance >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 500 }}>
+                        {item.variance >= 0 ? '+' : ''}{item.variance.toLocaleString()}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                          <div style={{ width: 60, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                            <div style={{ width: `${item.fa_percent}%`, height: '100%', borderRadius: 3, background: item.fa_percent >= 70 ? '#22c55e' : item.fa_percent >= 50 ? '#f59e0b' : '#ef4444' }} />
+                          </div>
+                          <span style={{ fontWeight: 600 }}>{item.fa_percent}%</span>
+                        </div>
+                      </td>
+                      <td>
+                        <span>
+                          {item.zone === 'critical' ? 'Critical' : item.zone === 'watch' ? 'Watch' : 'Good'}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                        {item.zone === 'critical' ? 'Review model & input data' : item.zone === 'watch' ? 'Monitor next cycle' : '—'}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -190,7 +190,7 @@ export default function OthersPage() {
     setChannelSaving(true);
     try {
       if (editingChannel) {
-        await masterDataApi.channels.update(editingChannel.id, { channel_name: channelForm.channel_name, status: channelForm.status } as any);
+        await masterDataApi.channels.update(String(editingChannel.id), { channel_name: channelForm.channel_name, status: channelForm.status } as any);
         addToast('success', 'Channel updated');
       } else {
         await masterDataApi.channels.create(channelForm as any);
@@ -204,7 +204,7 @@ export default function OthersPage() {
     if (!deleteChannelTarget) return;
     setChannelDeleting(true);
     try {
-      await masterDataApi.channels.delete(deleteChannelTarget.id);
+      await masterDataApi.channels.delete(String(deleteChannelTarget.id));
       addToast('success', 'Channel deleted'); setDeleteChannelTarget(null); fetchChannels();
     } catch (e) { addToast('error', 'Delete failed', (e as Error).message); }
     finally { setChannelDeleting(false); }
@@ -225,7 +225,7 @@ export default function OthersPage() {
     setRegionSaving(true);
     try {
       if (editingRegion) {
-        await masterDataApi.regions.update(editingRegion.id, { region_name: regionForm.region_name, status: regionForm.status } as any);
+        await masterDataApi.regions.update(String(editingRegion.id), { region_name: regionForm.region_name, status: regionForm.status } as any);
         addToast('success', 'Region updated');
       } else {
         await masterDataApi.regions.create(regionForm as any);
@@ -253,7 +253,7 @@ export default function OthersPage() {
     if (!deleteRegionTarget) return;
     setRegionDeleting(true);
     try {
-      await masterDataApi.regions.delete(deleteRegionTarget.id);
+      await masterDataApi.regions.delete(String(deleteRegionTarget.id));
       addToast('success', 'Region deleted'); setDeleteRegionTarget(null); fetchRegions();
     } catch (e) { addToast('error', 'Delete failed', (e as Error).message); }
     finally { setRegionDeleting(false); }
@@ -274,7 +274,7 @@ export default function OthersPage() {
     setBrandSaving(true);
     try {
       if (editingBrand) {
-        await masterDataApi.brands.update(editingBrand.id, { brand_name: brandForm.brand_name, status: brandForm.status } as any);
+        await masterDataApi.brands.update(String(editingBrand.id), { brand_name: brandForm.brand_name, status: brandForm.status } as any);
         addToast('success', 'Brand updated');
       } else {
         await masterDataApi.brands.create(brandForm as any);
@@ -288,7 +288,7 @@ export default function OthersPage() {
     if (!deleteBrandTarget) return;
     setBrandDeleting(true);
     try {
-      await masterDataApi.brands.delete(deleteBrandTarget.id);
+      await masterDataApi.brands.delete(String(deleteBrandTarget.id));
       addToast('success', 'Brand deleted'); setDeleteBrandTarget(null); fetchBrands();
     } catch (e) { addToast('error', 'Delete failed', (e as Error).message); }
     finally { setBrandDeleting(false); }
